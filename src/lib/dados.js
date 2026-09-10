@@ -53,8 +53,8 @@ export async function carregarPatio() {
     .select('*')
     .is('dt_saida', null)
     .is('excluido_em', null)
-    .order('dt_entrada', { ascending: true })
-    .order('hr_entrada', { ascending: true });
+    .order('dt_entrada', { ascending: false })
+    .order('hr_entrada', { ascending: false });
   if (error) throw error;
   return data;
 }
