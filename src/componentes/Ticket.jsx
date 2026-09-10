@@ -250,7 +250,10 @@ export function TicketModal({ ticket, filial, perfil, celular, placa, onCelular,
       // o Imprimir principal, não no lugar dele.
       if (tecla === 'f' || tecla === 'escape') { e.preventDefault(); onFechar(); }
       else if (tecla === 'w') { e.preventDefault(); window.open(linkWhatsApp(ticket, celular, filial), '_blank', 'noopener,noreferrer'); salvarCelularDoCliente(); onFechar(); }
-      else if (tecla === 'i') { e.preventDefault(); imprimirTicket(ticket, filial); onFechar(); }
+      // Enter = mesmo atalho do I (Imprimir): na cabine o fluxo quase sempre
+      // termina em imprimir, sem tirar a mão do teclado — ver Patio.jsx
+      // (onKeyDownPlaca/onKeyDownModelo) pro resto da cadeia placa->carro->Enter.
+      else if (tecla === 'i' || tecla === 'enter') { e.preventDefault(); imprimirTicket(ticket, filial); onFechar(); }
       else if (tecla === 'r' && ticket.ticketRps) { e.preventDefault(); imprimirTicket(ticket.ticketRps, filial); }
       else if (tecla === 'd' && ticket.ticketDivida) { e.preventDefault(); imprimirTicket(ticket.ticketDivida, filial); }
     }

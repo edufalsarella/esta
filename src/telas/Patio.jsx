@@ -101,6 +101,8 @@ export default function Patio({ perfil }) {
   const [abrirVendaProdutos, setAbrirVendaProdutos] = useState(false); // fluxo de "Venda Produtos" (menu ⋮)
   const [pendenteCaixa, setPendenteCaixa] = useState(null); // { executar } — ação de recebimento esperando caixa aberto
   const placaRef = useRef(null);
+  const buscaModeloRef = useRef(null);
+  const btnRegistrarRef = useRef(null);
   // Ausente = true (comportamento de sempre): só desliga se explicitamente false.
   const imprimeTicketMensalista = filial?.config?.patio?.imprimeTicketMensalista !== false;
 
@@ -581,6 +583,32 @@ export default function Patio({ perfil }) {
     // identificador ($$$0042), como no sistema antigo.
     if (p && !REGEX_PLACA.test(p)) { setConfirmPlaca(p); return; }
     await prosseguirEntrada();
+  }
+
+  /**
+   * Enter no campo Placa: na cabine o operador não deveria precisar do
+   * mouse pra encadear placa -> carro -> Registrar entrada. Placa já no
+   * pátio (vai pra saída) ou mal formatada (confirmação "sem chapa") continuam
+   * pelo submit nativo do form (mesmo fluxo de sempre) — só quando é mesmo uma
+   * entrada nova é que o Enter pula pro campo Carro em vez de tentar submeter
+   * cedo demais (e cair no erro "digite um carro do catálogo").
+   */
+  function onKeyDownPlaca(e) {
+    if (e.key !== 'Enter') return;
+    const p = placa.trim().toUpperCase();
+    if (encontrarNoPatio(p) || (p && !REGEX_PLACA.test(p))) return;
+    e.preventDefault();
+    buscaModeloRef.current?.focus();
+    buscaModeloRef.current?.select();
+  }
+
+  /** Enter no campo Carro: fecha as sugestões e passa o foco pro botão
+   * "Registrar entrada" — o Enter seguinte (nativo, botão focado) finaliza. */
+  function onKeyDownModelo(e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    setMostrarSugestoes(false);
+    btnRegistrarRef.current?.focus();
   }
 
   async function prosseguirEntrada() {
@@ -1471,7 +1499,7 @@ export default function Patio({ perfil }) {
             <label>Placa ou nº do ticket</label>
             <input className="mono placa-input campo-destaque" ref={placaRef} value={placa}
               onChange={(e) => { setPlaca(e.target.value); setConfirmPlaca(null); setVagaEsgotada(null); setMensalistaVencido(null); }}
-              onBlur={(e) => detectar(e.target.value)}
+              onBlur={(e) => detectar(e.target.value)} onKeyDown={onKeyDownPlaca}
               inputMode="text" autoCapitalize="characters" autoComplete="off"
               placeholder="ABC1D23" style={{ textTransform: 'uppercase' }} />
             <span className="suave" style={{ fontSize: 11 }}>
@@ -1486,10 +1514,11 @@ export default function Patio({ perfil }) {
           )}
           <div className="campo campo-busca" style={{ minWidth: 340 }}>
             <label>Carro</label>
-            <input value={buscaModelo}
+            <input ref={buscaModeloRef} value={buscaModelo}
               onChange={(e) => onBuscaModeloChange(e.target.value)}
               onFocus={() => setMostrarSugestoes(true)}
               onBlur={() => setTimeout(() => setMostrarSugestoes(false), 150)}
+              onKeyDown={onKeyDownModelo}
               placeholder="Digite o modelo do carro…" style={{ width: '100%', fontSize: 18 }} />
             {mostrarSugestoes && sugestoes.length > 0 && (
               <ul className="sugestoes-lista">
@@ -1532,7 +1561,7 @@ export default function Patio({ perfil }) {
               { label: `Avarias${fotosAvarias ? ` (${fotosAvarias} foto${fotosAvarias > 1 ? 's' : ''})` : ''}`, onClick: () => setModalAvarias(true) },
               { label: `Vlr. Antecipado${Number(valorAntecipado) > 0 ? ` (${fmtBRL(Number(valorAntecipado))})` : ''}`, onClick: () => setModalAntecipado(true) },
             ]} />
-          <button className="btn-primary" type="submit">Registrar entrada</button>
+          <button className="btn-primary" type="submit" ref={btnRegistrarRef}>Registrar entrada</button>
           {detectado && (
             <span className="badge-mens">
               {detectado.tipo_mens === 'H' ? 'Hóspede' : 'Mensalista'}: {detectado.nome}
@@ -1776,7 +1805,12 @@ export default function Patio({ perfil }) {
                 {avarias.split('\n').length}/5 linhas
               </span>
             </div>
-            <label className="btn-ghost" style={{ cursor: 'pointer', display: 'inline-block' }}>
+            {/* tabIndex + onKeyDown: sem isso o <label> não entra na ordem de Tab
+                (o <input> real fica display:none, também fora dela) — só clique
+                de mouse abria o seletor de foto/câmera. Depois de aberto, a
+                escolha do arquivo em si é sempre do sistema operacional. */}
+            <label className="btn-ghost" style={{ cursor: 'pointer', display: 'inline-block' }} tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.querySelector('input').click(); } }}>
               Tirar/anexar foto
               <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
                 onChange={(e) => { const f = e.target.files[0]; if (f) baixarFotoAvaria(f); e.target.value = ''; }} />
