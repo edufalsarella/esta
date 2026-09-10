@@ -1,12 +1,15 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { fmtBRL } from '../lib/tempo.js';
+import { fmtBRL, dataHoraDe } from '../lib/tempo.js';
 import { carregarRelatorioCaixa, imprimirRelatorioCaixa } from '../lib/caixaRelatorio.js';
 import { ehGerente } from '../lib/acesso.js';
+
+const fmtQuando = (d) => d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
 export default function Caixa({ perfil }) {
   const [caixa, setCaixa] = useState(null);
   const [resumo, setResumo] = useState(null);
+  const [movimentacoes, setMovimentacoes] = useState([]);
   const [erro, setErro] = useState('');
   const [abertura, setAbertura] = useState('0');
   const [sangria, setSangria] = useState({ valor: '', motivo: '' });
@@ -27,26 +30,27 @@ export default function Caixa({ perfil }) {
       .eq('operador_id', perfil.id).eq('status', 'aberto').maybeSingle();
     if (error) { setErro(error.message); return; }
     setCaixa(c);
-    if (!c) { setResumo(null); return; }
+    if (!c) { setResumo(null); setMovimentacoes([]); return; }
 
     const [{ data: movs }, { data: sangrias }, { data: formas }, { data: mensPagtos }, { data: antecipadosEntrada }, { data: antecipadosReserva }, { data: vendasProdutos }] = await Promise.all([
-      supabase.from('movimentos').select('id,valor').eq('caixa_id', c.id).not('dt_saida', 'is', null),
-      supabase.from('sangrias').select('valor').eq('caixa_id', c.id),
-      supabase.from('formas_pagamento').select('codigo,eh_dinheiro'),
+      supabase.from('movimentos').select('id,placa,modelo,valor,dt_saida,hr_saida').eq('caixa_id', c.id).not('dt_saida', 'is', null),
+      supabase.from('sangrias').select('id,valor,motivo,created_at').eq('caixa_id', c.id),
+      supabase.from('formas_pagamento').select('codigo,descricao,eh_dinheiro'),
       // Mensalidades recebidas neste turno (Mensalistas → Receber).
-      supabase.from('mensalista_pagamentos').select('valor_pago,forma_pagamento').eq('caixa_id', c.id),
+      supabase.from('mensalista_pagamentos').select('id,valor_pago,forma_pagamento,created_at,mensalistas(razao)').eq('caixa_id', c.id),
       // Valores antecipados recebidos na ENTRADA neste turno (ver 0039_valor_antecipado.sql)
       // — ligados direto pelo próprio caixa_id do pagamento, não pelo do movimento
       // (que só é gravado na saída, podendo ser um turno diferente).
-      supabase.from('movimento_pagamentos').select('valor,forma_pagamento').eq('caixa_id', c.id),
+      supabase.from('movimento_pagamentos').select('id,valor,forma_pagamento,created_at,movimentos(placa)').eq('caixa_id', c.id),
       // Valores antecipados recebidos ao CRIAR UMA RESERVA neste turno (ver
       // 0040_reserva_antecipado.sql) — mesmo raciocínio, caixa_id próprio.
-      supabase.from('reservas').select('valor_antecipado,forma_antecipado').eq('caixa_id_antecipado', c.id),
+      supabase.from('reservas').select('id,placa,nome,valor_antecipado,forma_antecipado,created_at').eq('caixa_id_antecipado', c.id),
       // Vendas de produto (balcão) neste turno (ver 0042_produtos.sql) — nunca
       // passa por movimentos/notas_fiscais, caixa_id próprio igual antecipado.
-      supabase.from('vendas_produtos').select('valor_total,forma_pagamento').eq('caixa_id', c.id),
+      supabase.from('vendas_produtos').select('id,quantidade,valor_total,forma_pagamento,criado_em,produtos(descricao)').eq('caixa_id', c.id),
     ]);
     const dinheiroCods = new Set((formas || []).filter((f) => f.eh_dinheiro).map((f) => f.codigo));
+    const descForma = Object.fromEntries((formas || []).map((f) => [f.codigo, f.descricao]));
     let dinheiroSaidas = 0, total = 0;
     const ids = (movs || []).map((m) => m.id);
     total = (movs || []).reduce((s, m) => s + Number(m.valor || 0), 0);
@@ -79,6 +83,43 @@ export default function Caixa({ perfil }) {
       .reduce((s, v) => s + Number(v.valor_total || 0), 0);
     const dinheiro = dinheiroSaidas + dinheiroMensalidades + dinheiroAntecipados + dinheiroProdutos;
     const totalSangria = (sangrias || []).reduce((s, x) => s + Number(x.valor || 0), 0);
+
+    // Extrato do turno, item a item — pra conferir na hora, não só o resumo
+    // agregado dos Kpis acima. Mais recente primeiro (mesmo critério da lista
+    // do pátio). Saída não tem uma única "forma": pode vir dividida em mais
+    // de uma (ver movimento_pagamentos com caixa_id null) — mostra "—" ali.
+    const itens = [
+      ...(movs || []).map((m) => ({
+        id: `saida-${m.id}`, quando: dataHoraDe(m.dt_saida, Number(m.hr_saida)), tipo: 'Saída',
+        descricao: `${m.placa}${m.modelo ? ` — ${m.modelo}` : ''}`, forma: null, valor: Number(m.valor || 0),
+      })),
+      ...(mensPagtos || []).map((p) => ({
+        id: `mens-${p.id}`, quando: new Date(p.created_at), tipo: 'Mensalidade',
+        descricao: p.mensalistas?.razao || '—', forma: descForma[p.forma_pagamento] || p.forma_pagamento,
+        valor: Number(p.valor_pago || 0),
+      })),
+      ...(antecipadosEntrada || []).map((p) => ({
+        id: `ant-${p.id}`, quando: new Date(p.created_at), tipo: 'Antecipado',
+        descricao: p.movimentos?.placa ? `Entrada ${p.movimentos.placa}` : 'Entrada de veículo',
+        forma: descForma[p.forma_pagamento] || p.forma_pagamento, valor: Number(p.valor || 0),
+      })),
+      ...reservasAntecip.map((r) => ({
+        id: `res-${r.id}`, quando: new Date(r.created_at), tipo: 'Antecipado',
+        descricao: `Reserva${r.placa ? ` ${r.placa}` : ''}${r.nome ? ` — ${r.nome}` : ''}`,
+        forma: descForma[r.forma_antecipado] || r.forma_antecipado, valor: Number(r.valor_antecipado || 0),
+      })),
+      ...(vendasProdutos || []).map((v) => ({
+        id: `prod-${v.id}`, quando: new Date(v.criado_em), tipo: 'Produto',
+        descricao: `${v.produtos?.descricao || '—'} (${Number(v.quantidade)}x)`,
+        forma: descForma[v.forma_pagamento] || v.forma_pagamento, valor: Number(v.valor_total || 0),
+      })),
+      ...(sangrias || []).map((s) => ({
+        id: `sang-${s.id}`, quando: new Date(s.created_at), tipo: 'Sangria',
+        descricao: s.motivo || '—', forma: null, valor: -Number(s.valor || 0),
+      })),
+    ].sort((a, b) => b.quando - a.quando);
+    setMovimentacoes(itens);
+
     setResumo({
       qtd: (movs || []).length, total, dinheiro, sangrias: totalSangria,
       qtdMensalidades: (mensPagtos || []).length, mensalidades,
@@ -201,6 +242,28 @@ export default function Caixa({ perfil }) {
           "Em dinheiro" e "Esperado no caixa" já incluem as mensalidades, os valores antecipados e
           as vendas de produtos recebidos neste turno.
         </p>
+      </div>
+
+      <div className="card">
+        <h2>Movimentações do turno ({movimentacoes.length})</h2>
+        <p className="suave">Tudo que entrou (e as sangrias que saíram) neste caixa, do mais recente pro mais antigo — pra conferir antes de fechar.</p>
+        <div className="tabela-scroll">
+          <table>
+            <thead><tr><th>Quando</th><th>Tipo</th><th>Descrição</th><th>Forma</th><th>Valor</th></tr></thead>
+            <tbody>
+              {movimentacoes.map((m) => (
+                <tr key={m.id}>
+                  <td className="mono">{fmtQuando(m.quando)}</td>
+                  <td>{m.tipo}</td>
+                  <td>{m.descricao}</td>
+                  <td>{m.forma || '—'}</td>
+                  <td style={m.valor < 0 ? { color: 'var(--erro)' } : undefined}>{fmtBRL(m.valor)}</td>
+                </tr>
+              ))}
+              {movimentacoes.length === 0 && <tr><td colSpan={5} className="suave">Nada lançado neste turno ainda.</td></tr>}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="card" style={{ maxWidth: 460 }}>
