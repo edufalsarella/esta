@@ -1664,7 +1664,7 @@ export default function Patio({ perfil }) {
         {verSaidasMobile && (
           <div className="tabela-scroll">
             <table>
-              <thead><tr><th>Placa</th><th>Carro</th><th>Saída</th><th>Valor</th><th></th></tr></thead>
+              <thead><tr><th>Placa</th><th>Carro</th><th>Entrada</th><th>Saída</th><th>Valor</th><th></th></tr></thead>
               <tbody>
                 {saidasRecentes.map((m) => (
                   <tr key={m.id}>
@@ -1673,9 +1673,12 @@ export default function Patio({ perfil }) {
                       : <span className="placa mono">{m.placa}</span>}</td>
                     <td>{m.modelo || '—'}</td>
                     <td className="mono">
+                      {m.dt_entrada ? `${m.dt_entrada.split('-').reverse().join('/')} ${fmtHora(Number(m.hr_entrada))}` : '—'}
+                    </td>
+                    <td className="mono">
                       {m.excluido_em
-                        ? new Date(m.excluido_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                        : fmtHora(Number(m.hr_saida))}
+                        ? new Date(m.excluido_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                        : `${m.dt_saida.split('-').reverse().join('/')} ${fmtHora(Number(m.hr_saida))}`}
                     </td>
                     <td>
                       {m.excluido_em
@@ -1694,7 +1697,7 @@ export default function Patio({ perfil }) {
                     </td>
                   </tr>
                 ))}
-                {saidasRecentes.length === 0 && <tr><td colSpan={5} className="suave">Nenhuma saída hoje.</td></tr>}
+                {saidasRecentes.length === 0 && <tr><td colSpan={6} className="suave">Nenhuma saída hoje.</td></tr>}
               </tbody>
             </table>
           </div>
