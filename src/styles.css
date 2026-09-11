@@ -98,10 +98,13 @@ th { color: var(--suave); font-size: 12px; text-transform: uppercase; }
    preencher a linha inteira. minmax mais estreito (130px, não 160px) pra
    os 7 KPIs do BI caberem numa linha só em telas normais de desktop. */
 .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin-bottom: 16px; }
-.kpi { background: var(--panel); border: 1px solid var(--linha); border-radius: 10px; padding: 14px 16px; }
+/* min-width:0 evita que o valor (ex.: "R$ 1.039,50", sem onde quebrar a não
+   ser no espaço) force o card a crescer além da coluna do grid — sem isso o
+   texto vazava pra fora da borda em vez de quebrar linha. */
+.kpi { background: var(--panel); border: 1px solid var(--linha); border-radius: 10px; padding: 14px 16px; min-width: 0; }
 .kpi.destaque { border-color: var(--ambar); }
 .kpi-rotulo { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--suave); }
-.kpi-valor { font-size: 24px; font-weight: 800; margin-top: 4px; }
+.kpi-valor { font-size: 24px; font-weight: 800; margin-top: 4px; overflow-wrap: break-word; }
 .kpi.destaque .kpi-valor { color: var(--ambar); }
 
 .status { font-size: 12px; padding: 2px 8px; border-radius: 20px; border: 1px solid var(--linha); text-transform: uppercase; }
