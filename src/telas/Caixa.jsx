@@ -34,7 +34,7 @@ export default function Caixa({ perfil }) {
     if (!c) { setResumo(null); setMovimentacoes([]); return; }
 
     const [{ data: movs }, { data: sangrias }, { data: formas }, { data: mensPagtos }, { data: antecipadosEntrada }, { data: antecipadosReserva }, { data: vendasProdutos }] = await Promise.all([
-      supabase.from('movimentos').select('id,placa,modelo,valor,dt_saida,hr_saida').eq('caixa_id', c.id).not('dt_saida', 'is', null),
+      supabase.from('movimentos').select('id,placa,modelo,valor,valor_convenio,dt_saida,hr_saida').eq('caixa_id', c.id).not('dt_saida', 'is', null),
       supabase.from('sangrias').select('id,valor,motivo,created_at').eq('caixa_id', c.id),
       supabase.from('formas_pagamento').select('codigo,descricao,eh_dinheiro'),
       // Mensalidades recebidas neste turno (Mensalistas → Receber).
@@ -55,6 +55,12 @@ export default function Caixa({ perfil }) {
     let dinheiroSaidas = 0, total = 0;
     const ids = (movs || []).map((m) => m.id);
     total = (movs || []).reduce((s, m) => s + Number(m.valor || 0), 0);
+    // Valor que o convênio vai pagar depois (não é dinheiro deste turno) —
+    // "Faturado" soma de volta, senão a estadia coberta por convênio some da
+    // conta como se não tivesse gerado receita nenhuma (mesmo raciocínio já
+    // corrigido no relatório de fechamento, ver caixaRelatorio.js).
+    const convenioTotal = (movs || []).reduce((s, m) => s + Number(m.valor_convenio || 0), 0);
+    const faturado = total + convenioTotal;
     // Forma(s) de pagamento de cada saída, pro extrato abaixo — split (mais
     // de uma forma na mesma saída) junta com " + ".
     const formasPorMovimento = {};
@@ -128,7 +134,7 @@ export default function Caixa({ perfil }) {
     setMovimentacoes(itens);
 
     setResumo({
-      qtd: (movs || []).length, total, dinheiro, sangrias: totalSangria,
+      qtd: (movs || []).length, total, faturado, convenio: convenioTotal, dinheiro, sangrias: totalSangria,
       qtdMensalidades: (mensPagtos || []).length, mensalidades,
       qtdAntecipados: (antecipadosEntrada || []).length + reservasAntecip.length, antecipados: antecipadosTotal,
       qtdProdutos: (vendasProdutos || []).length, produtos: produtosTotal,
@@ -244,7 +250,8 @@ export default function Caixa({ perfil }) {
         {resumo && (
           <div className="kpis">
             <Kpi rotulo="Saídas no turno" valor={resumo.qtd} />
-            <Kpi rotulo="Faturado (saídas)" valor={fmtBRL(resumo.total)} moeda />
+            <Kpi rotulo="Faturado (saídas)" valor={fmtBRL(resumo.faturado)} moeda />
+            <Kpi rotulo="Convênio" valor={fmtBRL(resumo.convenio)} moeda />
             <Kpi rotulo={`Mensalidades (${resumo.qtdMensalidades})`} valor={fmtBRL(resumo.mensalidades)} moeda />
             <Kpi rotulo={`Antecipados (${resumo.qtdAntecipados})`} valor={fmtBRL(resumo.antecipados)} moeda />
             <Kpi rotulo={`Venda de produtos (${resumo.qtdProdutos})`} valor={fmtBRL(resumo.produtos)} moeda />
@@ -255,8 +262,10 @@ export default function Caixa({ perfil }) {
           </div>
         )}
         <p className="suave">
-          "Em dinheiro" e "Esperado no caixa" já incluem as mensalidades, os valores antecipados e
-          as vendas de produtos recebidos neste turno.
+          "Faturado" já soma o valor do Convênio de volta (é receita da estadia, só que cobrada do
+          convênio depois, não na hora) — "Em dinheiro" e "Esperado no caixa" continuam só o que
+          entrou de fato neste turno (não incluem o Convênio, que ainda não foi recebido), mas já
+          incluem as mensalidades, os valores antecipados e as vendas de produtos.
         </p>
       </div>
 
