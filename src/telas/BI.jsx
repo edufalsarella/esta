@@ -20,13 +20,13 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
     ['Saídas', dados.totalVeic],
     ['Avulso', fmtBRL(dados.valorAvulso)],
     ['Serviços', fmtBRL(dados.valorServicos)],
-    ['Descontos (conv.)', fmtBRL(dados.descontos)],
+    ['Convênio', fmtBRL(dados.descontos)],
     ['Antecipados', fmtBRL(dados.antecipados)],
     ['Bônus fidelidade', fmtBRL(dados.bonus)],
     ['Tempo médio', fmtHora(dados.tempoMedio)],
     ['Mensalidades recebidas', `${dados.mensalidades.length} · ${fmtBRL(dados.mensalidadesTotal)}`],
     ['Venda de produtos', `${dados.produtosVendidos.length} · ${fmtBRL(dados.produtosTotal)}`],
-    ['Faturado (avulso + serviços + descontos + antecipados + bônus + mensalidades + produtos)', fmtBRL(dados.faturado)],
+    ['Faturado (avulso + serviços + convênio + antecipados + bônus + mensalidades + produtos)', fmtBRL(dados.faturado)],
   ].map(([r, v]) => `<p><strong>${escapeHtml(r)}:</strong> ${escapeHtml(v)}</p>`).join('');
 
   const porTipo = Object.entries(dados.porTipo)
@@ -82,7 +82,7 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
             v.cancelado ? '' : ` · Saída: ${escapeHtml(v.dt_saida.split('-').reverse().join('/'))} ${escapeHtml(fmtHora(Number(v.hr_saida)))} · Tempo: ${v.tempo != null ? escapeHtml(fmtHora(v.tempo)) : '—'}`
           }</p>
           ${v.cancelado ? '' : `<p class="v3">Pagto: ${escapeHtml(v.pagamento)} · Valor: ${escapeHtml(fmtBRL(v.valor))}${v.valorCalculado != null ? ' *' : ''}${
-            v.descontoConvenio ? ` · Desc. conv.: ${escapeHtml(fmtBRL(v.descontoConvenio))}` : ''
+            v.descontoConvenio ? ` · Convênio: ${escapeHtml(fmtBRL(v.descontoConvenio))}` : ''
           }${v.servico != null ? ` · Serviço: ${escapeHtml(fmtBRL(v.servico))}` : ''}</p>`}
         </div>`).join('') || '<p>Nenhum veículo no período.</p>'}
       ${veiculosDetalhe.some((v) => v.valorCalculado != null)
@@ -144,7 +144,7 @@ function textoRelatorio(dados, de, ate, filial) {
   linhas.push(`Saídas: ${dados.totalVeic}`);
   linhas.push(`Avulso: ${fmtBRL(dados.valorAvulso)}`);
   linhas.push(`Serviços: ${fmtBRL(dados.valorServicos)}`);
-  linhas.push(`Descontos (conv.): ${fmtBRL(dados.descontos)}`);
+  linhas.push(`Convênio: ${fmtBRL(dados.descontos)}`);
   linhas.push(`Antecipados: ${fmtBRL(dados.antecipados)}`);
   linhas.push(`Bônus fidelidade: ${fmtBRL(dados.bonus)}`);
   linhas.push(`Tempo médio: ${fmtHora(dados.tempoMedio)}`);
@@ -295,7 +295,7 @@ export default function BI({ perfil }) {
       // comAntecipado/comBonus em Patio.jsx) sem mexer em valor_proporcional
       // — precisam entrar na soma do Faturado igual o desconto de convênio,
       // senão o total fica maior que a soma das colunas visíveis (Avulso +
-      // Serviço + Desconto conv. + Mensalidade + Produtos), sem dar pra
+      // Serviço + Convênio + Mensalidade + Produtos), sem dar pra
       // conferir a conta batendo.
       antecipadoTotal += Number(m.valor_antecipado || 0);
       bonusTotal += Number(m.bonus_fidelidade || 0);
@@ -357,7 +357,7 @@ export default function BI({ perfil }) {
     for (const p of mensalidades) recebidoPorForma[p.forma] = (recebidoPorForma[p.forma] || 0) + p.valor;
     for (const v of produtosVendidos) recebidoPorForma[v.forma] = (recebidoPorForma[v.forma] || 0) + v.valor;
 
-    // "Descontos (conv.)" é o quanto o convênio tirou do valor cheio da
+    // "Convênio" é o quanto o convênio tirou do valor cheio da
     // tabela — usa a coluna valor_convenio (gravada pelo motor na saída,
     // ver Patio.jsx/confirmarSaida), não "valor_proporcional - valor": essa
     // diferença também inclui antecipado e bônus fidelidade (que não são
@@ -464,7 +464,7 @@ export default function BI({ perfil }) {
             <Kpi rotulo="Saídas" valor={dados.totalVeic} />
             <Kpi rotulo="Avulso" valor={fmtBRL(dados.valorAvulso)} moeda />
             <Kpi rotulo="Serviços" valor={fmtBRL(dados.valorServicos)} moeda />
-            <Kpi rotulo="Descontos (conv.)" valor={fmtBRL(dados.descontos)} moeda />
+            <Kpi rotulo="Convênio" valor={fmtBRL(dados.descontos)} moeda />
             <Kpi rotulo="Antecipados" valor={fmtBRL(dados.antecipados)} moeda />
             <Kpi rotulo="Bônus fidelidade" valor={fmtBRL(dados.bonus)} moeda />
             <Kpi rotulo="Tempo médio" valor={fmtHora(dados.tempoMedio)} />
@@ -473,7 +473,7 @@ export default function BI({ perfil }) {
             <Kpi rotulo="Faturado" valor={fmtBRL(dados.faturado)} destaque moeda />
           </div>
           <p className="suave" style={{ marginTop: -4 }}>
-            Faturado = Avulso + Serviços + Descontos (conv.) + Antecipados + Bônus fidelidade +
+            Faturado = Avulso + Serviços + Convênio + Antecipados + Bônus fidelidade +
             Mensalidades + Venda de produtos — o valor cheio, antes de qualquer desconto/abatimento.
           </p>
 
@@ -591,7 +591,7 @@ export default function BI({ perfil }) {
                 <table>
                   <thead><tr>
                     <th>Placa</th><th>Carro</th><th>Tabela</th><th>Entrada</th><th>Saída</th>
-                    <th>Tempo</th><th>Pagamento</th><th>Valor</th><th>Desc. convênio</th><th>Serviço</th>
+                    <th>Tempo</th><th>Pagamento</th><th>Valor</th><th>Convênio</th><th>Serviço</th>
                   </tr></thead>
                   <tbody>
                     {veiculos.map((v) => (

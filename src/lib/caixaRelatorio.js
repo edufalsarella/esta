@@ -71,12 +71,12 @@ export async function carregarRelatorioCaixa(caixa) {
   const descTabela = {};
   for (const t of tabelasPreco || []) if (!descTabela[t.tipo]) descTabela[t.tipo] = t.descricao;
 
-  let valorFaturado = 0, valorProporcionalTotal = 0, valorConvenioTotal = 0;
+  let recebidoSaidas = 0, valorProporcionalTotal = 0, valorConvenioTotal = 0;
   const porTipo = { avulso: 0, mensalista: 0 };
   const porConvenio = {};
   const porTabela = {};
   for (const m of movs || []) {
-    valorFaturado += Number(m.valor || 0);
+    recebidoSaidas += Number(m.valor || 0);
     valorProporcionalTotal += Number(m.valor_proporcional || 0);
     valorConvenioTotal += Number(m.valor_convenio || 0);
     if (MENSALISTA.has(m.tipo_mens)) porTipo.mensalista++; else porTipo.avulso++;
@@ -94,6 +94,12 @@ export async function carregarRelatorioCaixa(caixa) {
     et.valor += Number(m.valor || 0);
   }
   const descontos = valorConvenioTotal;
+  // "Valor faturado" é o valor CHEIO gerado pelas saídas (o que o cliente
+  // pagou + o que o convênio vai pagar depois) — recebidoSaidas por si só é
+  // só a parte cobrada do cliente na hora (mesmo raciocínio do "Faturado" do
+  // BI.jsx: sem somar valor_convenio de volta, o convênio desaparecia da
+  // conta, como se aquela estadia não tivesse gerado receita nenhuma).
+  const valorFaturado = recebidoSaidas + valorConvenioTotal;
 
   const mensalidades = (mensPagtos || []).map((p) => ({
     id: p.id, nome: p.mensalistas?.razao || '—', valor: Number(p.valor_pago || 0), forma: p.forma_pagamento,
@@ -132,7 +138,7 @@ export async function carregarRelatorioCaixa(caixa) {
   const sangriasLista = (sangrias || []).map((s) => ({ id: s.id, valor: Number(s.valor || 0), motivo: s.motivo || '' }));
   const sangriasTotal = sangriasLista.reduce((s, x) => s + x.valor, 0);
 
-  const totalRecebido = valorFaturado + mensalidadesTotal + antecipadosTotal + produtosTotal;
+  const totalRecebido = recebidoSaidas + mensalidadesTotal + antecipadosTotal + produtosTotal;
   const esperadoCaixa = Number(caixa.valor_abertura || 0) + dinheiro - sangriasTotal;
   const diferenca = caixa.valor_fechamento != null ? Number(caixa.valor_fechamento) - esperadoCaixa : null;
 
@@ -225,7 +231,7 @@ export function textoRelatorioCaixa(dados, filial, reimpressao = false, incluirM
 
   linhas.push('', 'FATURAMENTO',
     `Valor faturado: ${fmtBRL(dados.valorFaturado)}`,
-    `Descontos (convênio): ${fmtBRL(dados.descontos)}`,
+    `Convênio: ${fmtBRL(dados.descontos)}`,
     `Mensalidades: ${fmtBRL(dados.mensalidadesTotal)}`,
     `Antecipados: ${fmtBRL(dados.antecipadosTotal)}`,
     `Venda de produtos: ${fmtBRL(dados.produtosTotal)}`,
@@ -307,7 +313,7 @@ export function imprimirRelatorioCaixa(dados, filial, reimpressao = false, inclu
 
   const faturamento = secao('Faturamento')
     + linha('Valor faturado', fmtBRL(dados.valorFaturado))
-    + linha('Descontos (convênio)', fmtBRL(dados.descontos))
+    + linha('Convênio', fmtBRL(dados.descontos))
     + linha('Mensalidades', fmtBRL(dados.mensalidadesTotal))
     + linha('Antecipados', fmtBRL(dados.antecipadosTotal))
     + linha('Venda de produtos', fmtBRL(dados.produtosTotal))

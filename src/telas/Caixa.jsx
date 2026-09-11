@@ -348,7 +348,7 @@ function RelatorioCaixaModal({ dados, filial, reimpressao, onFechar }) {
 
         <SecaoRelatorio titulo="Faturamento">
           <div>Valor faturado: {fmtBRL(dados.valorFaturado)}</div>
-          <div>Descontos (convênio): {fmtBRL(dados.descontos)}</div>
+          <div>Convênio: {fmtBRL(dados.descontos)}</div>
           <div>Mensalidades: {fmtBRL(dados.mensalidadesTotal)}</div>
           <div>Antecipados: {fmtBRL(dados.antecipadosTotal)}</div>
           <div>Venda de produtos: {fmtBRL(dados.produtosTotal)}</div>

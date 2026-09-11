@@ -885,7 +885,7 @@ export default function Patio({ perfil }) {
     // Valor antecipado (pago na entrada, ver 0039_valor_antecipado.sql) —
     // só mexe em `.valor` (o cobrado), nunca em `.valorProporcional` (o
     // "cheio"), mesmo raciocínio do comBonus: não é desconto de convênio,
-    // não pode entrar na conta de "Descontos (conv.)" do BI.
+    // não pode entrar na conta de "Convênio" do BI.
     const valorAntecipadoMov = Number(mov.valor_antecipado || 0);
     const comAntecipado = (resultado) => (
       valorAntecipadoMov > 0
