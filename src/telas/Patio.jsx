@@ -1008,6 +1008,13 @@ export default function Patio({ perfil }) {
     } catch (e) { setErro(e.message); }
   }
 
+  /** Cancelar a saída (botão ou clique fora do card) — sem isso o foco ficava
+   * perdido em vez de voltar pro campo Placa, pro operador seguir digitando. */
+  function cancelarSaida() {
+    setSaindo(null);
+    focarPlaca();
+  }
+
   function mudarConvenioSaida(codigo) {
     if (!saindo) return;
     try {
@@ -2023,7 +2030,7 @@ export default function Patio({ perfil }) {
       )}
 
       {saindo && (
-        <div className="modal-bg" onClick={() => setSaindo(null)}>
+        <div className="modal-bg" onClick={cancelarSaida}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="card-cab">
               <h2>
@@ -2220,7 +2227,7 @@ export default function Patio({ perfil }) {
               </p>
             )}
             <div className="linha-form" style={{ justifyContent: 'flex-end' }}>
-              <button className="btn-ghost" onClick={() => setSaindo(null)}>Cancelar</button>
+              <button className="btn-ghost" onClick={cancelarSaida}>Cancelar</button>
               <button className="btn-primary" ref={btnConfirmarSaidaRef} disabled={saindo.resultado.pedeValor} onClick={() => confirmarSaida()}>Confirmar saída</button>
             </div>
           </div>
