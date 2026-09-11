@@ -54,6 +54,9 @@ export default function Caixa({ perfil }) {
     let dinheiroSaidas = 0, total = 0;
     const ids = (movs || []).map((m) => m.id);
     total = (movs || []).reduce((s, m) => s + Number(m.valor || 0), 0);
+    // Forma(s) de pagamento de cada saída, pro extrato abaixo — split (mais
+    // de uma forma na mesma saída) junta com " + ".
+    const formasPorMovimento = {};
     if (ids.length) {
       // Só pagamento de saída (caixa_id null) — o de antecipado tem o
       // próprio caixa_id e já é somado à parte (`antecipados` abaixo), senão
@@ -61,6 +64,9 @@ export default function Caixa({ perfil }) {
       // mesmo turno.
       const { data: pg } = await supabase.from('movimento_pagamentos').select('*').in('movimento_id', ids).is('caixa_id', null);
       dinheiroSaidas = (pg || []).filter((p) => dinheiroCods.has(p.forma_pagamento)).reduce((s, p) => s + Number(p.valor || 0), 0);
+      for (const p of pg || []) {
+        (formasPorMovimento[p.movimento_id] ||= []).push(descForma[p.forma_pagamento] || p.forma_pagamento);
+      }
     }
     const mensalidades = (mensPagtos || []).reduce((s, p) => s + Number(p.valor_pago || 0), 0);
     const dinheiroMensalidades = (mensPagtos || [])
@@ -86,12 +92,12 @@ export default function Caixa({ perfil }) {
 
     // Extrato do turno, item a item — pra conferir na hora, não só o resumo
     // agregado dos Kpis acima. Mais recente primeiro (mesmo critério da lista
-    // do pátio). Saída não tem uma única "forma": pode vir dividida em mais
-    // de uma (ver movimento_pagamentos com caixa_id null) — mostra "—" ali.
+    // do pátio).
     const itens = [
       ...(movs || []).map((m) => ({
         id: `saida-${m.id}`, quando: dataHoraDe(m.dt_saida, Number(m.hr_saida)), tipo: 'Saída',
-        descricao: `${m.placa}${m.modelo ? ` — ${m.modelo}` : ''}`, forma: null, valor: Number(m.valor || 0),
+        descricao: `${m.placa}${m.modelo ? ` — ${m.modelo}` : ''}`,
+        forma: (formasPorMovimento[m.id] || []).join(' + ') || null, valor: Number(m.valor || 0),
       })),
       ...(mensPagtos || []).map((p) => ({
         id: `mens-${p.id}`, quando: new Date(p.created_at), tipo: 'Mensalidade',
