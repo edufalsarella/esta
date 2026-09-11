@@ -103,6 +103,7 @@ export default function Patio({ perfil }) {
   const placaRef = useRef(null);
   const buscaModeloRef = useRef(null);
   const btnRegistrarRef = useRef(null);
+  const btnConfirmarSaidaRef = useRef(null);
   // Ausente = true (comportamento de sempre): só desliga se explicitamente false.
   const imprimeTicketMensalista = filial?.config?.patio?.imprimeTicketMensalista !== false;
 
@@ -993,7 +994,17 @@ export default function Patio({ perfil }) {
       setSaindo({ mov, convenioCodigo, horaConvenio, servicosSelecionados, resultado, bonusAplicado: null, bonusDisponivel: null, pagamentos });
       abrirValorObrigatorioSePreciso(resultado);
       const bonus = await avaliarBonus(resultado, mov.placa);
-      if (bonus) { setSaindo((s) => (s ? { ...s, bonusDisponivel: bonus } : s)); setModalBonus(bonus); }
+      if (bonus) { setSaindo((s) => (s ? { ...s, bonusDisponivel: bonus } : s)); setModalBonus(bonus); return; }
+      // Sem convênio, sem valor obrigatório pra confirmar e pagando em
+      // dinheiro (o padrão de prepararSaida) — placa/nº de ticket digitado e
+      // Enter já finaliza, sem precisar de mouse. Convênio, bônus disponível
+      // ou forma diferente de dinheiro continuam exigindo o operador olhar
+      // antes de confirmar (ver mudarConvenioSaida/setPagamentos, que tiram o
+      // foco de novo ao trocar algo).
+      const formaEhDinheiro = formas.find((f) => f.codigo === pagamentos[0]?.forma)?.eh_dinheiro;
+      if (!convenioCodigo && !resultado.pedeValor && pagamentos.length === 1 && formaEhDinheiro) {
+        requestAnimationFrame(() => btnConfirmarSaidaRef.current?.focus());
+      }
     } catch (e) { setErro(e.message); }
   }
 
@@ -2210,7 +2221,7 @@ export default function Patio({ perfil }) {
             )}
             <div className="linha-form" style={{ justifyContent: 'flex-end' }}>
               <button className="btn-ghost" onClick={() => setSaindo(null)}>Cancelar</button>
-              <button className="btn-primary" disabled={saindo.resultado.pedeValor} onClick={() => confirmarSaida()}>Confirmar saída</button>
+              <button className="btn-primary" ref={btnConfirmarSaidaRef} disabled={saindo.resultado.pedeValor} onClick={() => confirmarSaida()}>Confirmar saída</button>
             </div>
           </div>
         </div>
