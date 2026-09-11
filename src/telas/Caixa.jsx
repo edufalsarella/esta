@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { fmtBRL, dataHoraDe } from '../lib/tempo.js';
-import { carregarRelatorioCaixa, imprimirRelatorioCaixa } from '../lib/caixaRelatorio.js';
+import { carregarRelatorioCaixa, imprimirRelatorioCaixa, textoRelatorioCaixa } from '../lib/caixaRelatorio.js';
 import { ehGerente } from '../lib/acesso.js';
 
 const fmtQuando = (d) => d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -18,6 +18,7 @@ export default function Caixa({ perfil }) {
   const [caixaFechado, setCaixaFechado] = useState(null); // caixa recém-fechado — oferece "Imprimir relatório"
   const [historico, setHistorico] = useState([]);
   const [imprimindo, setImprimindo] = useState(null); // id do caixa sendo carregado pra impressão
+  const [relatorioPreview, setRelatorioPreview] = useState(null); // { dados, reimpressao } — prévia na tela antes de imprimir/enviar
 
   useEffect(() => {
     supabase.from('filiais').select('nome_fantasia, cnpj').eq('id', perfil.filial_id).maybeSingle()
@@ -176,17 +177,25 @@ export default function Caixa({ perfil }) {
     carregarHistorico();
   }
 
+  // Antes ia direto pra impressão; agora mostra a prévia na tela primeiro —
+  // dali o operador escolhe Imprimir, Enviar por e-mail/WhatsApp ou Cancelar
+  // (ver RelatorioCaixaModal).
   async function imprimir(c, reimpressao = false) {
     setErro(''); setImprimindo(c.id);
     try {
       const dados = await carregarRelatorioCaixa(c);
-      imprimirRelatorioCaixa(dados, filial, reimpressao);
+      setRelatorioPreview({ dados, reimpressao });
     } catch (e) {
       setErro(e.message);
     } finally {
       setImprimindo(null);
     }
   }
+
+  const modalRelatorio = relatorioPreview && (
+    <RelatorioCaixaModal dados={relatorioPreview.dados} filial={filial} reimpressao={relatorioPreview.reimpressao}
+      onFechar={() => setRelatorioPreview(null)} />
+  );
 
   if (erro) return <div className="card aviso">{erro}<p className="suave">Se a tabela não existir, rode a migration 0003_caixa.sql.</p></div>;
 
@@ -214,6 +223,7 @@ export default function Caixa({ perfil }) {
         <button className="btn-primary" onClick={abrir}>Abrir caixa</button>
       </div>
       <HistoricoCaixas historico={historico} imprimindo={imprimindo} onImprimir={imprimir} vendoTodos={ehGerente(perfil)} />
+      {modalRelatorio}
     </>
   );
 
@@ -300,6 +310,122 @@ export default function Caixa({ perfil }) {
       </div>
 
       <HistoricoCaixas historico={historico} imprimindo={imprimindo} onImprimir={imprimir} vendoTodos={ehGerente(perfil)} />
+      {modalRelatorio}
+    </>
+  );
+}
+
+/**
+ * Prévia do relatório na tela — antes ia direto pra impressão (ver
+ * comentário em `imprimir` acima). "Imprimir"/e-mail/WhatsApp não fecham a
+ * prévia sozinhos (o operador pode querer mais de um canal do mesmo
+ * fechamento); só "Cancelar" ou clicar fora fecha.
+ */
+function RelatorioCaixaModal({ dados, filial, reimpressao, onFechar }) {
+  const { caixa } = dados;
+  const texto = textoRelatorioCaixa(dados, filial, reimpressao);
+  const linkWhatsApp = `https://wa.me/?text=${encodeURIComponent(texto)}`;
+  const linkEmail = `mailto:?subject=${encodeURIComponent(`Fechamento de Caixa Nº ${caixa.numero}`)}&body=${encodeURIComponent(texto)}`;
+  const formasEntries = Object.entries(dados.porForma);
+
+  return (
+    <div className="modal-bg" onClick={onFechar}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h2>Fechamento de Caixa Nº {caixa.numero}</h2>
+        <p className="suave" style={{ marginTop: -6 }}>
+          De: {new Date(caixa.aberto_em).toLocaleString('pt-BR')}<br />
+          Até: {caixa.fechado_em ? new Date(caixa.fechado_em).toLocaleString('pt-BR') : 'em aberto'}
+        </p>
+
+        <SecaoRelatorio titulo="Veículos">
+          <div>Saídas no turno: {dados.qtdSaidas}</div>
+          <div>&nbsp;&nbsp;Avulso: {dados.porTipo.avulso}</div>
+          <div>&nbsp;&nbsp;Mensalista: {dados.porTipo.mensalista}</div>
+          <div>Cancelados: {dados.qtdCancelados}</div>
+          {!reimpressao && <div>Sem saída (no pátio): {dados.qtdSemSaida}</div>}
+        </SecaoRelatorio>
+
+        <SecaoRelatorio titulo="Faturamento">
+          <div>Valor faturado: {fmtBRL(dados.valorFaturado)}</div>
+          <div>Descontos (convênio): {fmtBRL(dados.descontos)}</div>
+          <div>Mensalidades: {fmtBRL(dados.mensalidadesTotal)}</div>
+          <div>Antecipados: {fmtBRL(dados.antecipadosTotal)}</div>
+          <div>Venda de produtos: {fmtBRL(dados.produtosTotal)}</div>
+          <div><strong>Total recebido: {fmtBRL(dados.totalRecebido)}</strong></div>
+        </SecaoRelatorio>
+
+        <SecaoRelatorio titulo="Caixa">
+          <div>Troco de abertura: {fmtBRL(Number(caixa.valor_abertura || 0))}</div>
+          <div>Sangrias: {fmtBRL(dados.sangriasTotal)}</div>
+          {dados.sangrias.map((s) => <div key={s.id}>&nbsp;&nbsp;{s.motivo || 'Sangria'}: -{fmtBRL(s.valor)}</div>)}
+          <div>Dinheiro recebido: {fmtBRL(dados.dinheiro)}</div>
+          <div><strong>Esperado no caixa: {fmtBRL(dados.esperadoCaixa)}</strong></div>
+          {caixa.valor_fechamento != null && <div>Dinheiro contado: {fmtBRL(Number(caixa.valor_fechamento))}</div>}
+          {dados.diferenca != null && (
+            <div className={Math.abs(dados.diferenca) < 0.005 ? 'ok-txt' : 'aviso-btn'}>
+              Diferença: {dados.diferenca >= 0 ? '+' : ''}{fmtBRL(dados.diferenca)}
+            </div>
+          )}
+        </SecaoRelatorio>
+
+        <SecaoRelatorio titulo="Formas de pagamento">
+          {formasEntries.length
+            ? formasEntries.map(([k, v]) => <div key={k}>{dados.descForma[k] || k}: {fmtBRL(v)}</div>)
+            : <div>Sem recebimentos: —</div>}
+        </SecaoRelatorio>
+
+        {Object.keys(dados.porConvenio).length > 0 && (
+          <SecaoRelatorio titulo="Convênios">
+            {Object.entries(dados.porConvenio).map(([k, v]) => (
+              <div key={k}>{dados.descConvenio[k] || k} ({v.qtd}): {fmtBRL(v.desconto)}</div>
+            ))}
+          </SecaoRelatorio>
+        )}
+
+        {Object.keys(dados.porTabela).length > 0 && (
+          <SecaoRelatorio titulo="Tabelas de preço">
+            {Object.entries(dados.porTabela).map(([k, v]) => (
+              <div key={k}>{dados.descTabela[k] || k} ({v.qtd}): {fmtBRL(v.valor)}</div>
+            ))}
+          </SecaoRelatorio>
+        )}
+
+        {dados.mensalidades.length > 0 && (
+          <SecaoRelatorio titulo={`Mensalidades recebidas (${dados.mensalidades.length})`}>
+            {dados.mensalidades.map((m) => <div key={m.id}>{m.nome}: {fmtBRL(m.valor)}</div>)}
+          </SecaoRelatorio>
+        )}
+
+        {dados.produtos.length > 0 && (
+          <SecaoRelatorio titulo={`Vendas de produtos (${dados.produtos.length})`}>
+            {dados.produtos.map((p) => <div key={p.id}>{p.nome} ({p.quantidade}x): {fmtBRL(p.valor)}</div>)}
+          </SecaoRelatorio>
+        )}
+
+        {dados.antecipados.length > 0 && (
+          <SecaoRelatorio titulo={`Antecipados (${dados.antecipados.length})`}>
+            {dados.antecipados.map((a) => <div key={a.id}>{a.ref}: {fmtBRL(a.valor)}</div>)}
+          </SecaoRelatorio>
+        )}
+
+        <p className="suave" style={{ fontSize: 12, marginTop: 12 }}>Operador: {dados.operador}</p>
+
+        <div className="linha-form" style={{ justifyContent: 'flex-end', flexWrap: 'wrap', marginTop: 12 }}>
+          <button className="btn-ghost" onClick={onFechar}>Cancelar</button>
+          <a className="btn-ghost" href={linkEmail} target="_blank" rel="noopener noreferrer">Enviar por e-mail</a>
+          <a className="btn-ghost" href={linkWhatsApp} target="_blank" rel="noopener noreferrer">Enviar por WhatsApp</a>
+          <button className="btn-primary" onClick={() => imprimirRelatorioCaixa(dados, filial, reimpressao)}>Imprimir</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SecaoRelatorio({ titulo, children }) {
+  return (
+    <>
+      <h3 style={{ marginTop: 14, marginBottom: 4, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--suave)' }}>{titulo}</h3>
+      <div className="mono" style={{ fontSize: 13, lineHeight: 1.5 }}>{children}</div>
     </>
   );
 }

@@ -163,6 +163,73 @@ function secao(titulo) {
 }
 
 /**
+ * Mesmo relatório de `imprimirRelatorioCaixa`, em texto puro — usado pro
+ * "Enviar por WhatsApp"/"Enviar por e-mail" da prévia na tela (ver
+ * RelatorioCaixaModal em Caixa.jsx). Mesma regra do `reimpressao` (omite
+ * "Sem saída" numa reimpressão de dias depois).
+ */
+export function textoRelatorioCaixa(dados, filial, reimpressao = false) {
+  const { caixa } = dados;
+  const linhas = [];
+  if (filial?.nome_fantasia) linhas.push(filial.nome_fantasia);
+  if (filial?.cnpj) linhas.push(`CNPJ: ${filial.cnpj}`);
+  linhas.push('', `FECHAMENTO DE CAIXA Nº ${caixa.numero}`,
+    `De: ${new Date(caixa.aberto_em).toLocaleString('pt-BR')}`,
+    `Até: ${caixa.fechado_em ? new Date(caixa.fechado_em).toLocaleString('pt-BR') : 'em aberto'}`);
+
+  linhas.push('', 'VEÍCULOS',
+    `Saídas no turno: ${dados.qtdSaidas}`,
+    `  Avulso: ${dados.porTipo.avulso}`,
+    `  Mensalista: ${dados.porTipo.mensalista}`,
+    `Cancelados: ${dados.qtdCancelados}`);
+  if (!reimpressao) linhas.push(`Sem saída (no pátio): ${dados.qtdSemSaida}`);
+
+  linhas.push('', 'FATURAMENTO',
+    `Valor faturado: ${fmtBRL(dados.valorFaturado)}`,
+    `Descontos (convênio): ${fmtBRL(dados.descontos)}`,
+    `Mensalidades: ${fmtBRL(dados.mensalidadesTotal)}`,
+    `Antecipados: ${fmtBRL(dados.antecipadosTotal)}`,
+    `Venda de produtos: ${fmtBRL(dados.produtosTotal)}`,
+    `Total recebido: ${fmtBRL(dados.totalRecebido)}`);
+
+  linhas.push('', 'CAIXA', `Troco de abertura: ${fmtBRL(Number(caixa.valor_abertura || 0))}`,
+    `Sangrias: ${fmtBRL(dados.sangriasTotal)}`);
+  for (const s of dados.sangrias) linhas.push(`  ${s.motivo || 'Sangria'}: -${fmtBRL(s.valor)}`);
+  linhas.push(`Dinheiro recebido: ${fmtBRL(dados.dinheiro)}`, `Esperado no caixa: ${fmtBRL(dados.esperadoCaixa)}`);
+  if (caixa.valor_fechamento != null) linhas.push(`Dinheiro contado: ${fmtBRL(Number(caixa.valor_fechamento))}`);
+  if (dados.diferenca != null) linhas.push(`Diferença: ${dados.diferenca >= 0 ? '+' : ''}${fmtBRL(dados.diferenca)}`);
+
+  linhas.push('', 'FORMAS DE PAGAMENTO');
+  const formasEntries = Object.entries(dados.porForma);
+  if (formasEntries.length) for (const [k, v] of formasEntries) linhas.push(`${dados.descForma[k] || k}: ${fmtBRL(v)}`);
+  else linhas.push('Sem recebimentos: —');
+
+  if (Object.keys(dados.porConvenio).length) {
+    linhas.push('', 'CONVÊNIOS');
+    for (const [k, v] of Object.entries(dados.porConvenio)) linhas.push(`${dados.descConvenio[k] || k} (${v.qtd}): ${fmtBRL(v.desconto)}`);
+  }
+  if (Object.keys(dados.porTabela).length) {
+    linhas.push('', 'TABELAS DE PREÇO');
+    for (const [k, v] of Object.entries(dados.porTabela)) linhas.push(`${dados.descTabela[k] || k} (${v.qtd}): ${fmtBRL(v.valor)}`);
+  }
+  if (dados.mensalidades.length) {
+    linhas.push('', `MENSALIDADES RECEBIDAS (${dados.mensalidades.length})`);
+    for (const m of dados.mensalidades) linhas.push(`${m.nome}: ${fmtBRL(m.valor)}`);
+  }
+  if (dados.produtos.length) {
+    linhas.push('', `VENDAS DE PRODUTOS (${dados.produtos.length})`);
+    for (const p of dados.produtos) linhas.push(`${p.nome} (${p.quantidade}x): ${fmtBRL(p.valor)}`);
+  }
+  if (dados.antecipados.length) {
+    linhas.push('', `ANTECIPADOS (${dados.antecipados.length})`);
+    for (const a of dados.antecipados) linhas.push(`${a.ref}: ${fmtBRL(a.valor)}`);
+  }
+
+  linhas.push('', `Operador: ${dados.operador}`);
+  return linhas.join('\n');
+}
+
+/**
  * Relatório de fechamento de caixa, impresso na bobina de 58mm (mesmo padrão
  * de Ticket.jsx — ver comentário lá sobre @page/58mm) — é um comprovante,
  * não um relatório A4 como BI/Reservas.
