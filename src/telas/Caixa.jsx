@@ -228,14 +228,14 @@ export default function Caixa({ perfil }) {
         {resumo && (
           <div className="kpis">
             <Kpi rotulo="Saídas no turno" valor={resumo.qtd} />
-            <Kpi rotulo="Faturado (saídas)" valor={fmtBRL(resumo.total)} />
-            <Kpi rotulo={`Mensalidades (${resumo.qtdMensalidades})`} valor={fmtBRL(resumo.mensalidades)} />
-            <Kpi rotulo={`Antecipados (${resumo.qtdAntecipados})`} valor={fmtBRL(resumo.antecipados)} />
-            <Kpi rotulo={`Venda de produtos (${resumo.qtdProdutos})`} valor={fmtBRL(resumo.produtos)} />
-            <Kpi rotulo="Total do turno" valor={fmtBRL(resumo.total + resumo.mensalidades + resumo.antecipados + resumo.produtos)} />
-            <Kpi rotulo="Em dinheiro" valor={fmtBRL(resumo.dinheiro)} />
-            <Kpi rotulo="Sangrias" valor={fmtBRL(resumo.sangrias)} />
-            <Kpi rotulo="Esperado no caixa" valor={fmtBRL(resumo.esperadoCaixa)} destaque />
+            <Kpi rotulo="Faturado (saídas)" valor={fmtBRL(resumo.total)} moeda />
+            <Kpi rotulo={`Mensalidades (${resumo.qtdMensalidades})`} valor={fmtBRL(resumo.mensalidades)} moeda />
+            <Kpi rotulo={`Antecipados (${resumo.qtdAntecipados})`} valor={fmtBRL(resumo.antecipados)} moeda />
+            <Kpi rotulo={`Venda de produtos (${resumo.qtdProdutos})`} valor={fmtBRL(resumo.produtos)} moeda />
+            <Kpi rotulo="Total do turno" valor={fmtBRL(resumo.total + resumo.mensalidades + resumo.antecipados + resumo.produtos)} moeda />
+            <Kpi rotulo="Em dinheiro" valor={fmtBRL(resumo.dinheiro)} moeda />
+            <Kpi rotulo="Sangrias" valor={fmtBRL(resumo.sangrias)} moeda />
+            <Kpi rotulo="Esperado no caixa" valor={fmtBRL(resumo.esperadoCaixa)} destaque moeda />
           </div>
         )}
         <p className="suave">
@@ -333,6 +333,17 @@ function HistoricoCaixas({ historico, imprimindo, onImprimir, vendoTodos }) {
   );
 }
 
-function Kpi({ rotulo, valor, destaque }) {
-  return <div className={'kpi' + (destaque ? ' destaque' : '')}><div className="kpi-rotulo">{rotulo}</div><div className="kpi-valor">{valor}</div></div>;
+/**
+ * `moeda`: tira o "R$" do valor (fica só o número) e mostra "(R$)" junto do
+ * rótulo — igual BI.jsx: com valor grande, "R$ 1.039,50" não cabia na
+ * largura do cartão; o número sozinho cabe bem mais.
+ */
+function Kpi({ rotulo, valor, destaque, moeda }) {
+  const texto = moeda ? String(valor).replace('R$', '').trim() : valor;
+  return (
+    <div className={'kpi' + (destaque ? ' destaque' : '')}>
+      <div className="kpi-rotulo">{rotulo}{moeda ? ' (R$)' : ''}</div>
+      <div className="kpi-valor">{texto}</div>
+    </div>
+  );
 }
