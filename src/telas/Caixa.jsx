@@ -323,7 +323,8 @@ export default function Caixa({ perfil }) {
  */
 function RelatorioCaixaModal({ dados, filial, reimpressao, onFechar }) {
   const { caixa } = dados;
-  const texto = textoRelatorioCaixa(dados, filial, reimpressao);
+  const [incluirMovimentacoes, setIncluirMovimentacoes] = useState(false);
+  const texto = textoRelatorioCaixa(dados, filial, reimpressao, incluirMovimentacoes);
   const linkWhatsApp = `https://wa.me/?text=${encodeURIComponent(texto)}`;
   const linkEmail = `mailto:?subject=${encodeURIComponent(`Fechamento de Caixa Nº ${caixa.numero}`)}&body=${encodeURIComponent(texto)}`;
   const formasEntries = Object.entries(dados.porForma);
@@ -408,13 +409,29 @@ function RelatorioCaixaModal({ dados, filial, reimpressao, onFechar }) {
           </SecaoRelatorio>
         )}
 
+        {incluirMovimentacoes && dados.itens?.length > 0 && (
+          <SecaoRelatorio titulo={`Movimentações (${dados.itens.length})`}>
+            {dados.itens.map((it) => (
+              <div key={it.id}>
+                {it.quando.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} {it.tipo} —{' '}
+                {it.descricao}{it.forma ? ` (${it.forma})` : ''}: {fmtBRL(it.valor)}
+              </div>
+            ))}
+          </SecaoRelatorio>
+        )}
+
         <p className="suave" style={{ fontSize: 12, marginTop: 12 }}>Operador: {dados.operador}</p>
+
+        <label className="campo-check" style={{ marginTop: 4 }}>
+          <input type="checkbox" checked={incluirMovimentacoes} onChange={(e) => setIncluirMovimentacoes(e.target.checked)} />
+          Incluir a lista de movimentações (item a item) no relatório
+        </label>
 
         <div className="linha-form" style={{ justifyContent: 'flex-end', flexWrap: 'wrap', marginTop: 12 }}>
           <button className="btn-ghost" onClick={onFechar}>Cancelar</button>
           <a className="btn-ghost" href={linkEmail} target="_blank" rel="noopener noreferrer">Enviar por e-mail</a>
           <a className="btn-ghost" href={linkWhatsApp} target="_blank" rel="noopener noreferrer">Enviar por WhatsApp</a>
-          <button className="btn-primary" onClick={() => imprimirRelatorioCaixa(dados, filial, reimpressao)}>Imprimir</button>
+          <button className="btn-primary" onClick={() => imprimirRelatorioCaixa(dados, filial, reimpressao, incluirMovimentacoes)}>Imprimir</button>
         </div>
       </div>
     </div>

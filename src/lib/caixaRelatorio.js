@@ -28,8 +28,8 @@ export async function carregarRelatorioCaixa(caixa) {
     supabase.from('sangrias').select('*').eq('caixa_id', caixa.id).order('created_at'),
     supabase.from('formas_pagamento').select('codigo,descricao,eh_dinheiro'),
     supabase.from('mensalista_pagamentos').select('*, mensalistas(razao)').eq('caixa_id', caixa.id).order('dt_pagamento'),
-    supabase.from('movimento_pagamentos').select('*').eq('caixa_id', caixa.id),
-    supabase.from('reservas').select('valor_antecipado, forma_antecipado, placa, nome').eq('caixa_id_antecipado', caixa.id),
+    supabase.from('movimento_pagamentos').select('*, movimentos(placa)').eq('caixa_id', caixa.id),
+    supabase.from('reservas').select('id, valor_antecipado, forma_antecipado, placa, nome, created_at').eq('caixa_id_antecipado', caixa.id),
     supabase.from('vendas_produtos').select('*, produtos(codigo,descricao)').eq('caixa_id', caixa.id).order('criado_em'),
     supabase.from('perfis').select('nome').eq('id', caixa.operador_id).maybeSingle(),
     supabase.from('convenios').select('codigo, razao'),
@@ -136,13 +136,51 @@ export async function carregarRelatorioCaixa(caixa) {
   const esperadoCaixa = Number(caixa.valor_abertura || 0) + dinheiro - sangriasTotal;
   const diferenca = caixa.valor_fechamento != null ? Number(caixa.valor_fechamento) - esperadoCaixa : null;
 
+  // Extrato item a item (opcional no relatório — ver "Incluir lista de
+  // movimentações" em RelatorioCaixaModal/imprimirRelatorioCaixa) — mesmo
+  // formato do extrato ao vivo do caixa aberto (Caixa.jsx), mais recente
+  // primeiro. Saída junta as formas com " + " quando veio dividida (split).
+  const formasPorMovimento = {};
+  for (const p of pagtosSaida || []) (formasPorMovimento[p.movimento_id] ||= []).push(descForma[p.forma_pagamento] || p.forma_pagamento);
+  const itens = [
+    ...(movs || []).map((m) => ({
+      id: `saida-${m.id}`, quando: dataHoraDe(m.dt_saida, Number(m.hr_saida)), tipo: 'Saída',
+      descricao: `${m.placa}${m.modelo ? ` — ${m.modelo}` : ''}`,
+      forma: (formasPorMovimento[m.id] || []).join(' + ') || null, valor: Number(m.valor || 0),
+    })),
+    ...(mensPagtos || []).map((p) => ({
+      id: `mens-${p.id}`, quando: new Date(p.created_at), tipo: 'Mensalidade',
+      descricao: p.mensalistas?.razao || '—', forma: descForma[p.forma_pagamento] || p.forma_pagamento,
+      valor: Number(p.valor_pago || 0),
+    })),
+    ...(antecipadosEntrada || []).map((p) => ({
+      id: `ant-${p.id}`, quando: new Date(p.created_at), tipo: 'Antecipado',
+      descricao: p.movimentos?.placa ? `Entrada ${p.movimentos.placa}` : 'Entrada de veículo',
+      forma: descForma[p.forma_pagamento] || p.forma_pagamento, valor: Number(p.valor || 0),
+    })),
+    ...reservasAntecip.map((r) => ({
+      id: `res-${r.id}`, quando: new Date(r.created_at), tipo: 'Antecipado',
+      descricao: `Reserva${r.placa ? ` ${r.placa}` : ''}${r.nome ? ` — ${r.nome}` : ''}`,
+      forma: descForma[r.forma_antecipado] || r.forma_antecipado, valor: Number(r.valor_antecipado || 0),
+    })),
+    ...(vendasProdutos || []).map((v) => ({
+      id: `prod-${v.id}`, quando: new Date(v.criado_em), tipo: 'Produto',
+      descricao: `${v.produtos?.descricao || '—'} (${Number(v.quantidade)}x)`,
+      forma: descForma[v.forma_pagamento] || v.forma_pagamento, valor: Number(v.valor_total || 0),
+    })),
+    ...(sangrias || []).map((s) => ({
+      id: `sang-${s.id}`, quando: new Date(s.created_at), tipo: 'Sangria',
+      descricao: s.motivo || '—', forma: null, valor: -Number(s.valor || 0),
+    })),
+  ].sort((a, b) => b.quando - a.quando);
+
   return {
     caixa, operador: operadorRow?.nome || '—',
     porTipo, porConvenio, porTabela, descConvenio, descTabela, descForma,
     valorFaturado, valorProporcionalTotal, descontos,
     mensalidades, mensalidadesTotal, produtos, produtosTotal, antecipados, antecipadosTotal,
     porForma, dinheiro, sangrias: sangriasLista, sangriasTotal,
-    totalRecebido, esperadoCaixa, diferenca,
+    totalRecebido, esperadoCaixa, diferenca, itens,
     qtdSaidas: (movs || []).length, qtdCancelados: qtdCancelados || 0, qtdSemSaida,
   };
 }
@@ -166,9 +204,10 @@ function secao(titulo) {
  * Mesmo relatório de `imprimirRelatorioCaixa`, em texto puro — usado pro
  * "Enviar por WhatsApp"/"Enviar por e-mail" da prévia na tela (ver
  * RelatorioCaixaModal em Caixa.jsx). Mesma regra do `reimpressao` (omite
- * "Sem saída" numa reimpressão de dias depois).
+ * "Sem saída" numa reimpressão de dias depois) e do `incluirMovimentacoes`
+ * (extrato item a item, opcional).
  */
-export function textoRelatorioCaixa(dados, filial, reimpressao = false) {
+export function textoRelatorioCaixa(dados, filial, reimpressao = false, incluirMovimentacoes = false) {
   const { caixa } = dados;
   const linhas = [];
   if (filial?.nome_fantasia) linhas.push(filial.nome_fantasia);
@@ -225,6 +264,14 @@ export function textoRelatorioCaixa(dados, filial, reimpressao = false) {
     for (const a of dados.antecipados) linhas.push(`${a.ref}: ${fmtBRL(a.valor)}`);
   }
 
+  if (incluirMovimentacoes && dados.itens?.length) {
+    linhas.push('', `MOVIMENTAÇÕES (${dados.itens.length})`);
+    for (const it of dados.itens) {
+      const hora = it.quando.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      linhas.push(`${hora} ${it.tipo} — ${it.descricao}${it.forma ? ` (${it.forma})` : ''}: ${fmtBRL(it.valor)}`);
+    }
+  }
+
   linhas.push('', `Operador: ${dados.operador}`);
   return linhas.join('\n');
 }
@@ -239,8 +286,12 @@ export function textoRelatorioCaixa(dados, filial, reimpressao = false) {
  * esse número só faz sentido na hora exata do fechamento (reimprimir dias
  * depois, os carros que apareciam "sem saída" naquela hora já saíram há
  * muito — o número ficaria só enganando).
+ *
+ * `incluirMovimentacoes`: acrescenta o extrato item a item (dados.itens) no
+ * fim — opcional porque um turno com muito movimento deixa a bobina bem
+ * mais longa; o resumo por seção acima já é suficiente na maioria das vezes.
  */
-export function imprimirRelatorioCaixa(dados, filial, reimpressao = false) {
+export function imprimirRelatorioCaixa(dados, filial, reimpressao = false, incluirMovimentacoes = false) {
   const { caixa } = dados;
   const cabecalho = filial && (filial.nome_fantasia || filial.cnpj) ? `
     ${filial.nome_fantasia ? `<div class="nome">${escapeHtml(filial.nome_fantasia)}</div>` : ''}
@@ -309,6 +360,15 @@ export function imprimirRelatorioCaixa(dados, filial, reimpressao = false) {
     + dados.antecipados.map((a) => linha(a.ref, fmtBRL(a.valor))).join('')
   ) : '';
 
+  const fmtHoraCurta = (d) => d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const movimentacoesHtml = (incluirMovimentacoes && dados.itens?.length) ? (
+    secao(`Movimentações (${dados.itens.length})`)
+    + dados.itens.map((it) => linha(
+        `${fmtHoraCurta(it.quando)} ${it.tipo}`,
+        `${it.descricao}${it.forma ? ` (${it.forma})` : ''} — ${fmtBRL(it.valor)}`,
+      )).join('')
+  ) : '';
+
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Fechamento de caixa Nº ${escapeHtml(caixa.numero)}</title>
     <style>
       @page { size: 58mm auto; margin: 0; }
@@ -341,6 +401,7 @@ export function imprimirRelatorioCaixa(dados, filial, reimpressao = false) {
       ${mensalidadesHtml}
       ${produtosHtml}
       ${antecipadosHtml}
+      ${movimentacoesHtml}
       <div class="rodape">
         Operador: ${escapeHtml(dados.operador)}<br>
         Impresso em ${new Date().toLocaleString('pt-BR')}
