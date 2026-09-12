@@ -11,8 +11,20 @@
 const SERVICO_UUID = '000018f0-0000-1000-8000-00805f9b34fb';
 const CARACTERISTICA_UUID = '00002af1-0000-1000-8000-00805f9b34fb';
 
-const TAMANHO_BLOCO = 180; // GATT não aceita escritas grandes de uma vez
-const INTERVALO_ENTRE_BLOCOS_MS = 20;
+// 180 bytes por bloco causava texto embaralhado/faltando pedaço em impressora
+// real (testado pelo Eduardo, 2026-09-12: "Tabela" saiu "abela", "Entrada"
+// saiu "trada", trechos viraram "---"). O clone BLE genérico dessas
+// impressoras baratas tem uma ponte serial interna que não aguenta receber
+// rajadas grandes — mesmo o Web Bluetooth aceitando escrever 180 bytes de
+// uma vez (a característica GATT permite), o firmware da impressora não dá
+// conta de esvaziar o buffer a tempo e derruba bytes no meio, o que
+// desalinha o parser ESC/POS dali pra frente (uma sequência de comando
+// cortada no meio faz o resto do texto virar lixo, não só truncar). 20 bytes
+// é o payload padrão de MTU do Bluetooth clássico (o que esse tipo de chip
+// realmente aguenta, ainda que a API deixe pedir mais) — mesmo valor usado
+// por outros apps de impressão térmica Bluetooth com esse chip genérico.
+const TAMANHO_BLOCO = 20;
+const INTERVALO_ENTRE_BLOCOS_MS = 30;
 
 function aguardar(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
