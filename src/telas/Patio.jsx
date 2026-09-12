@@ -129,10 +129,17 @@ export default function Patio({ perfil }) {
     return () => clearInterval(id);
   }, []);
 
+  // Só o que COMEÇA com o que foi digitado (não "contém" em qualquer
+  // posição) — "GO" trazia "KANGOO" junto com "GOL"/"GOLF", o que não ajuda
+  // ninguém a digitar mais rápido. Ordem alfabética, não a ordem do cadastro
+  // — sem isso "GOLF" podia aparecer antes de "GOL" só por ter sido
+  // cadastrado primeiro.
   const sugestoes = useMemo(() => {
     const alvo = normalizar(buscaModelo);
     if (alvo.length < 2) return [];
-    return modelos.filter((m) => normalizar(m.nome).includes(alvo)).slice(0, 8);
+    return modelos.filter((m) => normalizar(m.nome).startsWith(alvo))
+      .sort((a, b) => normalizar(a.nome).localeCompare(normalizar(b.nome), 'pt-BR'))
+      .slice(0, 8);
   }, [buscaModelo, modelos]);
 
   const mensalistasNoPatio = useMemo(() => patio.filter((m) => MENSALISTA.has(m.tipo_mens)).length, [patio]);
@@ -608,7 +615,11 @@ export default function Patio({ perfil }) {
   function onKeyDownModelo(e) {
     if (e.key !== 'Enter') return;
     e.preventDefault();
-    setMostrarSugestoes(false);
+    // Sugestões na tela (mostrarSugestoes) e nenhuma ainda escolhida —
+    // assume a primeira da lista (já vem em ordem alfabética, ver
+    // `sugestoes` acima), sem precisar tirar a mão do teclado pra clicar.
+    if (mostrarSugestoes && sugestoes.length && !modeloSelecionado) selecionarModelo(sugestoes[0]);
+    else setMostrarSugestoes(false);
     btnRegistrarRef.current?.focus();
   }
 
