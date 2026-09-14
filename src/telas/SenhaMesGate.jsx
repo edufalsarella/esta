@@ -12,6 +12,7 @@ export default function SenhaMesGate({ children }) {
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
   const [ocupado, setOcupado] = useState(false);
+  const [numeroCliente, setNumeroCliente] = useState(null);
 
   async function conferir(senhaDigitada) {
     const { data: sessao } = await supabase.auth.getSession();
@@ -24,6 +25,9 @@ export default function SenhaMesGate({ children }) {
     if (!resp.ok) { setErro(dados.erro || 'Não deu pra conferir a senha do mês.'); setEstado('bloqueado'); return; }
     if (dados.liberado) { setEstado('liberado'); return; }
     setErro(dados.erro || '');
+    // Pra quem ficou travado aqui poder ligar/mandar mensagem pro fornecedor
+    // já sabendo de cabeça o código do cliente (ver conferir-senha-mes.js).
+    setNumeroCliente(dados.numeroCliente || null);
     setEstado('bloqueado');
   }
 
@@ -42,9 +46,13 @@ export default function SenhaMesGate({ children }) {
   return (
     <div className="centro">
       <form className="card" style={{ width: 360 }} onSubmit={confirmar}>
-        <h2>Senha do mês</h2>
+        <h2>
+          Senha do mês
+          {numeroCliente && <span className="suave" style={{ fontWeight: 400 }}> — Cliente Nº {numeroCliente}</span>}
+        </h2>
         <p className="suave">
-          Digite a senha do mês que você recebeu — sem ela o sistema não libera.
+          Digite a senha do mês que você recebeu — sem ela o sistema não libera. Ligando pro
+          fornecedor pra pedir, informe o número do cliente acima.
         </p>
         <div className="campo" style={{ margin: '16px 0' }}>
           <label>Senha do Mês</label>

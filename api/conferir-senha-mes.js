@@ -72,15 +72,18 @@ export default async function handler(req, res) {
   }
 
   // Fila vazia ou não bate com o mês corrente (é pra um mês futuro) —
-  // precisa da senha digitada por quem estiver logando.
+  // precisa da senha digitada por quem estiver logando. `numeroCliente` vai
+  // junto pra tela mostrar (Configurações → SenhaMesGate.jsx) — quem está
+  // travado aqui precisa ligar/mandar mensagem pro fornecedor pedindo a
+  // senha, e é bom já saber de cabeça o código do cliente pra falar.
   const { senhaDigitada } = req.body || {};
   if (!senhaDigitada) {
-    res.status(200).json({ liberado: false, precisaSenha: true });
+    res.status(200).json({ liberado: false, precisaSenha: true, numeroCliente: filial.numero_cliente || null });
     return;
   }
 
   if (String(senhaDigitada).trim().toUpperCase() !== esperada) {
-    res.status(200).json({ liberado: false, precisaSenha: true, erro: 'Senha incorreta.' });
+    res.status(200).json({ liberado: false, precisaSenha: true, erro: 'Senha incorreta.', numeroCliente: filial.numero_cliente || null });
     return;
   }
 
