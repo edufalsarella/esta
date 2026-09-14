@@ -461,6 +461,18 @@ export default function Configuracoes({ perfil }) {
         </p>
         {!filial ? 'Carregando…' : (
           <form onSubmit={salvar}>
+            <label className="campo-check" style={{ marginBottom: 4 }}>
+              <input type="checkbox" checked={!!filial.config?.nfse?.emitirTodaSaida} disabled={!podeEditar}
+                onChange={(e) => setNfse('emitirTodaSaida', e.target.checked)} />
+              Emitir RPS/DPS em todas as saídas de veículo?
+            </label>
+            <p className="suave" style={{ fontSize: 11, marginTop: 0, marginBottom: 10 }}>
+              Marcado, a tela de saída do pátio já abre sozinha pedindo o CPF/CNPJ do tomador
+              (pode deixar em branco pra emitir sem identificação) sempre que houver valor certo
+              a cobrar — sem precisar lembrar de ir em "Mais opções → Gerar DPS" toda vez. Dá pra
+              cancelar esse pedido numa saída específica sem perder o valor calculado; só não
+              gera o documento fiscal daquela vez.
+            </p>
             <div className="linha-form" style={{ marginBottom: 10 }}>
               <div className="campo" style={{ maxWidth: 220 }}>
                 <label>Inscrição municipal</label>

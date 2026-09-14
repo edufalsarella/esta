@@ -1006,6 +1006,17 @@ export default function Patio({ perfil }) {
       abrirValorObrigatorioSePreciso(resultado);
       const bonus = await avaliarBonus(resultado, mov.placa);
       if (bonus) { setSaindo((s) => (s ? { ...s, bonusDisponivel: bonus } : s)); setModalBonus(bonus); return; }
+      // "Emitir RPS/DPS em toda saída" (Configurações → Fiscal) — em vez de
+      // esperar o operador lembrar de abrir "Mais opções → Gerar DPS", já
+      // abre sozinho quando tem valor certo pra cobrar (pedeValor ainda
+      // pendente fica pro fluxo manual depois, ver abrirModalDps ali
+      // embaixo). Documento em branco continua permitido nessa tela (emite
+      // sem identificação) — quem não quiser DPS nesta saída específica só
+      // cancela o modal, sem perder o valor calculado.
+      if (filial?.config?.nfse?.emitirTodaSaida && resultado.valor > 0 && !resultado.pedeValor) {
+        await abrirModalDps(mov);
+        return;
+      }
       // Sem convênio, sem valor obrigatório pra confirmar e pagando em
       // dinheiro (o padrão de prepararSaida) — placa/nº de ticket digitado e
       // Enter já finaliza, sem precisar de mouse. Convênio, bônus disponível
@@ -1086,13 +1097,21 @@ export default function Patio({ perfil }) {
     setModalBonus(null);
   }
 
-  async function abrirModalDps() {
+  /**
+   * `movAlvo`: normalmente vem do `saindo` já em tela (clique manual em
+   * "Mais opções → Gerar DPS", onde o closure já está atualizado); passado
+   * explícito só quando chamado de dentro de prepararSaida (emissão
+   * automática) — ali `saindo` ainda não existe neste fechamento da função,
+   * só depois do próximo render, então ler `saindo?.mov` direto pegaria o
+   * valor antigo (ou nenhum).
+   */
+  async function abrirModalDps(movAlvo = saindo?.mov) {
     setModalDps({ documento: '', nome: '', issRetido: '' });
     setErroCnpj('');
     // Memória por placa (ver src/lib/issRetido.js) — se essa placa já teve
     // o recolhimento de ISS descoberto/corrigido antes, vem preenchido
     // sozinho, sem repetir o ciclo de rejeição da prefeitura.
-    const salvo = await issRetidoDaPlaca(supabase, saindo?.mov.placa);
+    const salvo = await issRetidoDaPlaca(supabase, movAlvo?.placa);
     if (salvo) setModalDps((s) => (s ? { ...s, issRetido: AR_PARA_ABRASF[salvo] } : s));
   }
 
