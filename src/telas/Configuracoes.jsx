@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { obterTema, aplicarTema } from '../lib/tema.js';
 import { imprimePedidosDaCabine, definirImprimePedidosDaCabine } from '../lib/preferenciasNavegador.js';
+import { conectarImpressoraBluetooth, impressoraBluetoothSalva, esquecerImpressoraBluetooth } from '../lib/bluetoothPrinter.js';
 import { ehFornecedor, ehSupervisor } from '../lib/acesso.js';
 import CidadeBusca from '../componentes/CidadeBusca.jsx';
 
@@ -15,6 +16,10 @@ export default function Configuracoes({ perfil }) {
   const [salvo, setSalvo] = useState(false);
   const [tema, setTema] = useState(obterTema());
   const [imprimeCabine, setImprimeCabine] = useState(imprimePedidosDaCabine());
+  const [impressoraBt, setImpressoraBt] = useState(impressoraBluetoothSalva());
+  const [pareandoBt, setPareandoBt] = useState(false);
+  const [erroBt, setErroBt] = useState('');
+  const suportaBluetooth = typeof navigator !== 'undefined' && !!navigator.bluetooth;
   const [previaLimpeza, setPreviaLimpeza] = useState(null);
   const [limpando, setLimpando] = useState(false);
   const [erroLimpeza, setErroLimpeza] = useState('');
@@ -29,6 +34,33 @@ export default function Configuracoes({ perfil }) {
   function mudarImprimeCabine(ligado) {
     definirImprimePedidosDaCabine(ligado);
     setImprimeCabine(ligado);
+  }
+
+  /**
+   * Pareamento único da impressora Bluetooth deste navegador (ver
+   * bluetoothPrinter.js) — feito aqui uma vez, o comprovante (Ticket.jsx →
+   * "Imprimir Bluetooth") reconecta sozinho dali pra frente, sem abrir o
+   * diálogo do navegador de novo a cada ticket. Só faz sentido nesta tela
+   * porque, num cliente, normalmente só existe UMA impressora — não é uma
+   * escolha por ticket.
+   */
+  async function parearBluetooth() {
+    setErroBt(''); setPareandoBt(true);
+    try {
+      const impressora = await conectarImpressoraBluetooth();
+      impressora.desconectar(); // só precisava do pareamento; a conexão de verdade é na hora de imprimir
+      setImpressoraBt(impressoraBluetoothSalva());
+    } catch (e) {
+      // Usuário cancelou o diálogo de pareamento não é bem um "erro" — não assusta com aviso vermelho.
+      if (e.name !== 'NotFoundError') setErroBt(e.message);
+    } finally {
+      setPareandoBt(false);
+    }
+  }
+
+  function esquecerBluetooth() {
+    esquecerImpressoraBluetooth();
+    setImpressoraBt(null);
   }
 
   async function carregar() {
@@ -144,6 +176,30 @@ export default function Configuracoes({ perfil }) {
           numa janela comum, a janela da cabine continua sem escutar os pedidos do celular.
           Quando estiver valendo, aparece <strong>🖨 cabine</strong> no topo da tela.
         </p>
+
+        {suportaBluetooth && (
+          <>
+            <label style={{ display: 'block', marginTop: 16 }}>Impressora Bluetooth</label>
+            <p className="suave" style={{ marginTop: 2 }}>
+              {impressoraBt
+                ? <>Pareada neste navegador: <strong>{impressoraBt.nome || 'Impressora Bluetooth'}</strong></>
+                : 'Nenhuma impressora pareada neste navegador ainda.'}
+            </p>
+            {erroBt && <div className="aviso">{erroBt}</div>}
+            <div className="linha-form">
+              <button className="btn-ghost" onClick={parearBluetooth} disabled={pareandoBt}>
+                {pareandoBt ? 'Pareando…' : impressoraBt ? 'Trocar impressora' : 'Parear impressora'}
+              </button>
+              {impressoraBt && <button className="btn-ghost aviso-btn" onClick={esquecerBluetooth}>Esquecer</button>}
+            </div>
+            <p className="suave" style={{ fontSize: 11, marginTop: 4 }}>
+              Pareando uma vez aqui, o botão "Imprimir Bluetooth" do comprovante reconecta
+              sozinho nela dali pra frente — sem abrir esse diálogo de novo a cada ticket. Como
+              num cliente normalmente só existe uma impressora, o pareamento vale pra todos os
+              tickets deste navegador, até você trocar ou esquecer.
+            </p>
+          </>
+        )}
       </div>
 
       <div className="card">

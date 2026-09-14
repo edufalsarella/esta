@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react';
 import { renderizarModelo, modeloParaTexto } from '../lib/modeloTicket.js';
 import { modeloParaEscPos } from '../lib/escpos.js';
-import { conectarImpressoraBluetooth } from '../lib/bluetoothPrinter.js';
+import { conectarImpressoraBluetooth, reconectarImpressoraSalva } from '../lib/bluetoothPrinter.js';
 import { MODELOS_PADRAO } from '../lib/modelosPadrao.js';
 import { supabase } from '../lib/supabase.js';
 
@@ -212,7 +212,12 @@ export function TicketModal({ ticket, filial, perfil, celular, placa, onCelular,
     try {
       let impressora = impressoraBt;
       if (!impressora) {
-        impressora = await conectarImpressoraBluetooth();
+        // Impressora pareada uma vez em Configurações → Aparência: reconecta
+        // sozinho, sem abrir o diálogo de pareamento de novo a cada ticket.
+        // Só cai pro diálogo (conectarImpressoraBluetooth) se não tem
+        // impressora salva, ou se ela sumiu do pareamento do sistema.
+        impressora = await reconectarImpressoraSalva();
+        if (!impressora) impressora = await conectarImpressoraBluetooth();
         setImpressoraBt(impressora);
       }
       const modelo = ticket.modelo || MODELOS_PADRAO[ticket.tipo];
