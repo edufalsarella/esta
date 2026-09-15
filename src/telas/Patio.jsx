@@ -652,6 +652,7 @@ export default function Patio({ perfil }) {
     setConfirmPlaca(null);
     setPlaca('');
     setDetectado(null);
+    focarPlaca();
   }
 
   async function confirmarNovoCarro() {
