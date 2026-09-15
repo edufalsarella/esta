@@ -104,6 +104,7 @@ export default function Patio({ perfil }) {
   const buscaModeloRef = useRef(null);
   const btnRegistrarRef = useRef(null);
   const btnConfirmarSaidaRef = useRef(null);
+  const btnFecharServicosRef = useRef(null);
   // Ausente = true (comportamento de sempre): só desliga se explicitamente false.
   const imprimeTicketMensalista = filial?.config?.patio?.imprimeTicketMensalista !== false;
 
@@ -707,6 +708,9 @@ export default function Patio({ perfil }) {
       if (novosMarcados.size > 0) proximo.add(mov.id); else proximo.delete(mov.id);
       return proximo;
     });
+    // Marcar é normalmente a última coisa antes de fechar — já deixa o
+    // botão focado, um Enter fecha sem precisar do mouse.
+    requestAnimationFrame(() => btnFecharServicosRef.current?.focus());
   }
 
   async function confirmarValorServico() {
@@ -721,6 +725,7 @@ export default function Patio({ perfil }) {
     setModalServicos({ mov, marcados: novosMarcados });
     setMovimentosComServico((prev) => new Set(prev).add(mov.id));
     setModalValorServico(null);
+    requestAnimationFrame(() => btnFecharServicosRef.current?.focus());
   }
 
   /**
@@ -1770,7 +1775,7 @@ export default function Patio({ perfil }) {
               </label>
             ))}
             <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
-              <button className="btn-primary" onClick={() => setModalServicos(null)}>Fechar</button>
+              <button className="btn-primary" ref={btnFecharServicosRef} onClick={() => setModalServicos(null)}>Fechar</button>
             </div>
           </div>
         </div>
