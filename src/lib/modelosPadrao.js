@@ -58,6 +58,7 @@ export const MODELOS_PADRAO = {
     '@SE(VC_NUM)@Convenio @CO@: -@VC@',
     '@SE(VD_NUM)@Divida ant.: +@VD@',
     '@SE(BONUS_NUM)@Bonus  : @BONUS@',
+    '@SE(SALDOBONUS_NUM)@Saldo bonus: @SALDOBONUS@ pontos',
     '@PG+@Valor  : @V@@PG-@',
     '--------------------------------',
     'Voce foi atendido por @US@',

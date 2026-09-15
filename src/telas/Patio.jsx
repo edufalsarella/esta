@@ -1242,7 +1242,7 @@ export default function Patio({ perfil }) {
    * sem passar pelo estado `saindo`.
    */
   async function confirmarSaida(tomadorDps, dadosOverride) {
-    const { mov, resultado, pagamentos, convenioCodigo, valorCalculado, bonusAplicado, servicosSelecionados, horaConvenio } = dadosOverride || saindo;
+    const { mov, resultado, pagamentos, convenioCodigo, valorCalculado, bonusAplicado, bonusDisponivel, servicosSelecionados, horaConvenio } = dadosOverride || saindo;
     // Cobrança real (dinheiro entrando agora) precisa de caixa aberto pra não
     // ficar de fora do fechamento — mensalista/hóspede sem pagamento (todos
     // os itens de `pagamentos` zerados) não passa por aqui. Busca direto no
@@ -1358,6 +1358,15 @@ export default function Patio({ perfil }) {
     }
     setModalDps(null);
 
+    // Saldo de pontos QUE FICA depois de gastar o bônus usado nesta saída —
+    // pontosProjetados (ver avaliarBonus) já é pontosAtual + o que esta
+    // saída rendeu, então só falta tirar o que a faixa aplicada consumiu.
+    // Sem bônus usado, não faz sentido nenhum imprimir "saldo" (a pontuação
+    // nem mudou de patamar) — só existe quando bonusAplicado está presente.
+    const saldoBonus = bonusAplicado
+      ? Number(bonusDisponivel?.pontosProjetados || 0) - Number(bonusAplicado.pontos_necessarios || 0)
+      : null;
+
     const formaTexto = resultado.mensalista ? 'Mensalista/hóspede'
       : (pagos.map((p) => formas.find((f) => f.codigo === p.forma)?.descricao || p.forma).join(' + ') || '—');
     const ticketSaida = comModelo('saida', {
@@ -1375,6 +1384,7 @@ export default function Patio({ perfil }) {
         ...(Number(mov.valor_dev) > 0 ? [['Dívida anterior', `+${fmtBRL(Number(mov.valor_dev))}`]] : []),
         ...(resultado.valorAntecipado > 0 ? [['Valor antecipado', `-${fmtBRL(resultado.valorAntecipado)}`]] : []),
         ...(bonusAplicado ? [['Bônus fidelidade', `-${fmtBRL(bonusAplicado.valor_desconto)}`]] : []),
+        ...(saldoBonus != null ? [['Saldo bônus', `${saldoBonus} pontos`]] : []),
         ['Valor', fmtBRL(resultado.valor)],
         ['Pagamento', formaTexto],
         ['Saída', `${dtSaida.split('-').reverse().join('/')} ${fmtHora(Number(hrSaida))}`],
@@ -1387,6 +1397,7 @@ export default function Patio({ perfil }) {
         servicos: servicosSelecionados, convenio: convenios[convenioCodigo],
       }),
       MOEDA: formaTexto,
+      ...(saldoBonus != null ? { SALDOBONUS: String(saldoBonus), SALDOBONUS_NUM: saldoBonus } : {}),
     });
     // Contraiu dívida nova nesta saída (forma "Devedor") — ticket dedicado,
     // igual ao TICKETD.TXT do legado (ver atualizarSaldoDevedor acima).
