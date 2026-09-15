@@ -684,6 +684,13 @@ export default function Patio({ perfil }) {
     return !!tabelas[servico?.tabela_tipo]?.faixas?.some((f) => f.tipoCobranca === 'valor');
   }
 
+  /** Fechar o modal de Serviços (botão, clique fora) — devolve o foco pro
+   * campo Placa, igual cancelarSaida, pro operador seguir digitando. */
+  function fecharModalServicos() {
+    setModalServicos(null);
+    focarPlaca();
+  }
+
   async function alternarServico(servicoId) {
     if (!modalServicos) return;
     const { mov, marcados } = modalServicos;
@@ -1758,7 +1765,7 @@ export default function Patio({ perfil }) {
       </div>
 
       {modalServicos && (
-        <div className="modal-bg" onClick={() => setModalServicos(null)}>
+        <div className="modal-bg" onClick={fecharModalServicos}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2>Serviços — <span className="placa mono">{modalServicos.mov.placa}</span></h2>
             <p className="suave">
@@ -1775,7 +1782,7 @@ export default function Patio({ perfil }) {
               </label>
             ))}
             <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
-              <button className="btn-primary" ref={btnFecharServicosRef} onClick={() => setModalServicos(null)}>Fechar</button>
+              <button className="btn-primary" ref={btnFecharServicosRef} onClick={fecharModalServicos}>Fechar</button>
             </div>
           </div>
         </div>
