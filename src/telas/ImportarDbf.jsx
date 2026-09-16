@@ -11,7 +11,9 @@ const LIMITE_PREVIA = 5;
 // Importação dos cadastros do legado (.dbf, Clipper/DOS) direto pela interface:
 // lê e decodifica o arquivo inteiramente no navegador (CP850 -> Unicode, ver
 // packages/dbf/dbf.ts), sem enviar pra nenhum servidor — o .dbf de mensalistas
-// tem dados pessoais. Restrita a supervisor (rota fora de ROTAS_OPERADOR).
+// tem dados pessoais. Restrita ao fornecedor (ver podeAcessar em acesso.js) —
+// uso quase todo na implantação; deixado à mão do cliente, arrisca substituir
+// cadastro em uso por curiosidade ou sem querer (ver "Substituir" abaixo).
 export default function ImportarDbf({ perfil }) {
   const [destino, setDestino] = useState('mensalistas');
   const [dbf, setDbf] = useState(null); // { nomeArquivo, campos, registros }

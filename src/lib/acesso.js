@@ -24,6 +24,12 @@ export const ROTAS_GERENTE = [
   '/bi', '/relatorio-convenios', '/mensalistas', '/convenios', '/servicos', '/modelos', '/fiscal', '/receber',
 ];
 
+export const ehFornecedor = (perfil) => perfil?.papel === 'fornecedor';
+/** Fornecedor tem, por definição, todo poder de supervisor. */
+export const ehSupervisor = (perfil) => perfil?.papel === 'supervisor' || ehFornecedor(perfil);
+/** "Do gerente pra cima" — usado nas permissões pontuais dentro das telas. */
+export const ehGerente = (perfil) => perfil?.papel === 'gerente' || ehSupervisor(perfil);
+
 /** Rotas permitidas, ou `null` quando o papel acessa tudo. */
 export function rotasDoPapel(papel) {
   if (papel === 'supervisor' || papel === 'fornecedor') return null;
@@ -31,7 +37,16 @@ export function rotasDoPapel(papel) {
   return ROTAS_OPERADOR;
 }
 
+/**
+ * `/importar` (Importar do legado .dbf) é exclusiva do fornecedor, mesmo pro
+ * supervisor do cliente (que normalmente "acessa tudo", ver rotasDoPapel) —
+ * o uso real é quase todo na implantação, importando dado do sistema antigo
+ * (Harbour/Clipper) do próprio Eduardo; deixado à mão do cliente, uma
+ * reimportação por curiosidade ou sem querer pode substituir cadastro que já
+ * está em uso (ver "Substituir" em ImportarDbf.jsx) e perder informação.
+ */
 export function podeAcessar(perfil, pathname) {
+  if (pathname === '/importar') return ehFornecedor(perfil);
   const rotas = rotasDoPapel(perfil?.papel);
   return rotas === null || rotas.includes(pathname);
 }
@@ -49,9 +64,3 @@ export function nfseAtivo(filial) {
   const habilitado = filial?.config?.nfse?.habilitado;
   return habilitado != null ? !!habilitado : !!filial?.config?.nfse?.padrao;
 }
-
-export const ehFornecedor = (perfil) => perfil?.papel === 'fornecedor';
-/** Fornecedor tem, por definição, todo poder de supervisor. */
-export const ehSupervisor = (perfil) => perfil?.papel === 'supervisor' || ehFornecedor(perfil);
-/** "Do gerente pra cima" — usado nas permissões pontuais dentro das telas. */
-export const ehGerente = (perfil) => perfil?.papel === 'gerente' || ehSupervisor(perfil);
