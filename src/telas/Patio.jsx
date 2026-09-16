@@ -105,6 +105,8 @@ export default function Patio({ perfil }) {
   const btnRegistrarRef = useRef(null);
   const btnConfirmarSaidaRef = useRef(null);
   const btnFecharServicosRef = useRef(null);
+  const inputNomeDpsRef = useRef(null);
+  const btnConfirmarDpsRef = useRef(null);
   // Ausente = true (comportamento de sempre): só desliga se explicitamente false.
   const imprimeTicketMensalista = filial?.config?.patio?.imprimeTicketMensalista !== false;
 
@@ -1121,11 +1123,31 @@ export default function Patio({ perfil }) {
   async function abrirModalDps(movAlvo = saindo?.mov) {
     setModalDps({ documento: '', nome: '', issRetido: '' });
     setErroCnpj('');
+    // Documento em branco é o caso mais comum (emite sem identificação) — o
+    // botão já abre focado, um Enter direto confirma. Quem for digitar
+    // CPF/CNPJ tira o foco de lá ao clicar/tabular no campo, então não atrapalha.
+    requestAnimationFrame(() => btnConfirmarDpsRef.current?.focus());
     // Memória por placa (ver src/lib/issRetido.js) — se essa placa já teve
     // o recolhimento de ISS descoberto/corrigido antes, vem preenchido
     // sozinho, sem repetir o ciclo de rejeição da prefeitura.
     const salvo = await issRetidoDaPlaca(supabase, movAlvo?.placa);
     if (salvo) setModalDps((s) => (s ? { ...s, issRetido: AR_PARA_ABRASF[salvo] } : s));
+  }
+
+  /** CPF/CNPJ (Gerar DPS) — Enter pula pro campo Nome/Razão social, não confirma
+   * ainda (ver onKeyDownNomeDps pro Enter seguinte). */
+  function onKeyDownDocumentoDps(e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    inputNomeDpsRef.current?.focus();
+  }
+
+  /** Nome/Razão social (Gerar DPS) — Enter foca o botão "Confirmar saída e
+   * gerar DPS"; o Enter seguinte (nativo, botão focado) já confirma. */
+  function onKeyDownNomeDps(e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    btnConfirmarDpsRef.current?.focus();
   }
 
   /**
@@ -2344,6 +2366,7 @@ export default function Patio({ perfil }) {
                 <label>CPF/CNPJ (opcional)</label>
                 <input className="mono" value={modalDps.documento}
                   onChange={(e) => { setModalDps({ ...modalDps, documento: e.target.value }); setErroCnpj(''); }}
+                  onKeyDown={onKeyDownDocumentoDps}
                   placeholder="Deixe em branco para não identificar" />
                 {erroCpfCnpj(modalDps.documento)
                   ? <span className="aviso" style={{ fontSize: 11 }}>{erroCpfCnpj(modalDps.documento)}</span>
@@ -2362,8 +2385,9 @@ export default function Patio({ perfil }) {
             {erroCnpj && <p className="aviso" style={{ fontSize: 11 }}>{erroCnpj}</p>}
             <div className="campo">
               <label>Nome / Razão social (opcional)</label>
-              <input value={modalDps.nome}
+              <input ref={inputNomeDpsRef} value={modalDps.nome}
                 onChange={(e) => setModalDps({ ...modalDps, nome: e.target.value })}
+                onKeyDown={onKeyDownNomeDps}
                 placeholder="Em branco vira &quot;CONSUMIDOR&quot; no documento" />
             </div>
             <div className="campo" style={{ marginTop: 10 }}>
@@ -2383,7 +2407,7 @@ export default function Patio({ perfil }) {
               <button className="btn-ghost" onClick={() => setModalDps(null)}>Cancelar</button>
               {/* Documento em branco é permitido (vira tomador não
                   identificado); errado, não — a prefeitura rejeitaria. */}
-              <button className="btn-primary" disabled={!!erroCpfCnpj(modalDps.documento)}
+              <button className="btn-primary" ref={btnConfirmarDpsRef} disabled={!!erroCpfCnpj(modalDps.documento)}
                 onClick={() => confirmarSaida({ cpf_cnpj: modalDps.documento, nome: modalDps.nome, issRetido: modalDps.issRetido || null })}>
                 Confirmar saída e gerar DPS
               </button>
