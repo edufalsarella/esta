@@ -253,11 +253,14 @@ export function TicketModal({ ticket, filial, perfil, celular, placa, onCelular,
       // carro já está esperando, não faz sentido voltar só pra clicar Fechar.
       // RPS/Bluetooth/cabine continuam abertos: costumam ser usados JUNTO com
       // o Imprimir principal, não no lugar dele.
-      if (tecla === 'f' || tecla === 'escape') { e.preventDefault(); onFechar(); }
+      // Enter = atalho do que é mais comum fazer com ESTE ticket. Na saída, o
+      // cliente do Eduardo quase nunca imprime (só quando pedem) — Enter aí é
+      // só Fechar, igual F/Esc. Nos outros tickets (entrada, mensalidade...)
+      // o fluxo de cabine costuma terminar em imprimir mesmo, então Enter
+      // continua valendo como I — ver Patio.jsx (onKeyDownPlaca/onKeyDownModelo)
+      // pro resto da cadeia placa->carro->Enter.
+      if (tecla === 'f' || tecla === 'escape' || (tecla === 'enter' && ticket.tipo === 'saida')) { e.preventDefault(); onFechar(); }
       else if (tecla === 'w') { e.preventDefault(); window.open(linkWhatsApp(ticket, celular, filial), '_blank', 'noopener,noreferrer'); salvarCelularDoCliente(); onFechar(); }
-      // Enter = mesmo atalho do I (Imprimir): na cabine o fluxo quase sempre
-      // termina em imprimir, sem tirar a mão do teclado — ver Patio.jsx
-      // (onKeyDownPlaca/onKeyDownModelo) pro resto da cadeia placa->carro->Enter.
       else if (tecla === 'i' || tecla === 'enter') { e.preventDefault(); imprimirTicket(ticket, filial); onFechar(); }
       else if (tecla === 'r' && ticket.ticketRps) { e.preventDefault(); imprimirTicket(ticket.ticketRps, filial); }
       else if (tecla === 'd' && ticket.ticketDivida) { e.preventDefault(); imprimirTicket(ticket.ticketDivida, filial); }
