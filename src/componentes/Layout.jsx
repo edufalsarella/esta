@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, Navigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
-import { PAPEIS, podeAcessar, ehFornecedor, ehSupervisor } from '../lib/acesso.js';
+import { PAPEIS, podeAcessar, ehFornecedor, ehSupervisor, nfseAtivo as calcularNfseAtivo } from '../lib/acesso.js';
 import { trocarFilialAtiva } from '../telas/EscolherFilial.jsx';
 import { imprimePedidosDaCabine } from '../lib/preferenciasNavegador.js';
 import { liberarSessao } from '../telas/SessoesGate.jsx';
@@ -53,6 +53,7 @@ export default function Layout({ perfil }) {
   const [nomeFilial, setNomeFilial] = useState('');
   const [filiais, setFiliais] = useState([]); // só o fornecedor tem mais de uma
   const [avisoLimpeza, setAvisoLimpeza] = useState(null); // {elegiveis} ou null
+  const [nfseAtivo, setNfseAtivo] = useState(true); // Fiscal > Configurações → "habilitada pela prefeitura?"
   const location = useLocation();
 
   // Avisa a cada login (só quem pode agir: supervisor/fornecedor) que tem
@@ -71,16 +72,20 @@ export default function Layout({ perfil }) {
     // Fornecedor enxerga todas as filiais (é o que alimenta o seletor); os
     // demais enxergam só a própria, então o maybeSingle continua valendo.
     if (ehFornecedor(perfil)) {
-      supabase.from('filiais').select('id, nome_fantasia, razao_social, numero_cliente').order('razao_social')
+      supabase.from('filiais').select('id, nome_fantasia, razao_social, numero_cliente, config').order('razao_social')
         .then(({ data }) => {
           setFiliais(data || []);
           const atual = (data || []).find((f) => f.id === perfil.filial_ativa);
           setNomeFilial(atual ? rotuloFilial(atual) : '');
+          setNfseAtivo(calcularNfseAtivo(atual));
         });
       return;
     }
-    supabase.from('filiais').select('nome_fantasia, numero_cliente').maybeSingle()
-      .then(({ data }) => setNomeFilial(data ? rotuloFilial(data) : ''));
+    supabase.from('filiais').select('nome_fantasia, numero_cliente, config').maybeSingle()
+      .then(({ data }) => {
+        setNomeFilial(data ? rotuloFilial(data) : '');
+        setNfseAtivo(calcularNfseAtivo(data));
+      });
   }, [perfil]);
 
   /**
@@ -140,7 +145,10 @@ export default function Layout({ perfil }) {
   }
 
   const grupos = GRUPOS
-    .map((g) => ({ ...g, itens: g.itens.filter((i) => podeAcessar(perfil, i.to)) }))
+    .map((g) => ({
+      ...g,
+      itens: g.itens.filter((i) => podeAcessar(perfil, i.to) && (i.to !== '/fiscal' || nfseAtivo)),
+    }))
     .filter((g) => g.itens.length > 0);
   // Fornecedor-only: acesso.js não distingue supervisor de fornecedor (os
   // dois têm rotasDoPapel === null), então não dá pra colocar isso no

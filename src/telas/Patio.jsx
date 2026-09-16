@@ -17,7 +17,7 @@ import { dadosFilial, dadosMovimento, permanenciaDe, montarTicketRps, dadosDivid
 import { erroCpfCnpj, validarCpfCnpj, formatarCpfCnpj } from '../lib/documento.js';
 import { buscarCnpj } from '../lib/cnpj.js';
 import { issRetidoDaPlaca, salvarIssRetidoDaPlaca, AR_PARA_ABRASF, ABRASF_PARA_AR } from '../lib/issRetido.js';
-import { ehGerente } from '../lib/acesso.js';
+import { ehGerente, nfseAtivo } from '../lib/acesso.js';
 import { configInfinitePay, ehCelular, parcelasPossiveis, cobrarNoInfiniteTap } from '../lib/infinitepay.js';
 
 const MENSALISTA = new Set(['I', 'P', 'H']);
@@ -1026,7 +1026,7 @@ export default function Patio({ perfil }) {
       // embaixo). Documento em branco continua permitido nessa tela (emite
       // sem identificação) — quem não quiser DPS nesta saída específica só
       // cancela o modal, sem perder o valor calculado.
-      if (filial?.config?.nfse?.emitirTodaSaida && resultado.valor > 0 && !resultado.pedeValor) {
+      if (nfseAtivo(filial) && filial?.config?.nfse?.emitirTodaSaida && resultado.valor > 0 && !resultado.pedeValor) {
         await abrirModalDps(mov);
         return;
       }
@@ -2000,7 +2000,7 @@ export default function Patio({ perfil }) {
       )}
 
       {abrirRecebimento && (
-        <ReceberMensalidadeFluxo perfil={perfil} formas={formas} caixaAberto={caixaAberto} onCaixaAberto={setCaixaAberto}
+        <ReceberMensalidadeFluxo perfil={perfil} formas={formas} caixaAberto={caixaAberto} onCaixaAberto={setCaixaAberto} filial={filial}
           onConcluido={(t, celularSugerido) => { setTicket(t); setCelularTicket(celularSugerido); setAbrirRecebimento(false); }}
           onFechar={() => setAbrirRecebimento(false)} />
       )}
@@ -2100,7 +2100,7 @@ export default function Patio({ perfil }) {
               {!saindo.resultado.mensalista && (
                 <CardAcoes acoes={[
                   { label: 'Alterar valor', onClick: abrirModalValor },
-                  ...(saindo.resultado.valor > 0 ? [{ label: 'Gerar DPS', onClick: abrirModalDps }] : []),
+                  ...(saindo.resultado.valor > 0 && nfseAtivo(filial) ? [{ label: 'Gerar DPS', onClick: abrirModalDps }] : []),
                 ]} />
               )}
             </div>

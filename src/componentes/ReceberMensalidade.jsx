@@ -4,6 +4,7 @@ import { hojeISO, proximoVencimento, primeiroVencimento, diferencaEmDias, dentro
 import { receberMensalidade, ticketRecebimentoComModelo, descricaoForma } from '../lib/mensalidade.js';
 import { criarNotaFiscal } from '../lib/notaFiscal.js';
 import { AR_PARA_ABRASF } from '../lib/issRetido.js';
+import { nfseAtivo } from '../lib/acesso.js';
 import { carregarModelosTicket } from '../lib/dados.js';
 import { montarTicketRps } from '../lib/dadosTicket.js';
 import AbrirCaixaInline from './AbrirCaixaInline.jsx';
@@ -15,7 +16,7 @@ import AbrirCaixaInline from './AbrirCaixaInline.jsx';
  * cadastro): o primeiro vencimento cai na próxima ocorrência do dia fixo, e o
  * valor sugerido é proporcional aos dias até lá.
  */
-export function ReceberModal({ mensalista, formas, semCaixa, perfil, onAbrirCaixa, onConfirmar, onFechar }) {
+export function ReceberModal({ mensalista, formas, semCaixa, perfil, filial, onAbrirCaixa, onConfirmar, onFechar }) {
   const hoje = hojeISO();
   const primeiraMensalidade = !mensalista.proximo_pagamento;
   // Base do próximo vencimento: a data que está no cadastro (a competência que
@@ -35,7 +36,7 @@ export function ReceberModal({ mensalista, formas, semCaixa, perfil, onAbrirCaix
   const [forma, setForma] = useState('');
   const [proximo, setProximo] = useState(proximoInicial);
   const [observacao, setObservacao] = useState('');
-  const [gerarNota, setGerarNota] = useState(!!mensalista.cpf_cnpj);
+  const [gerarNota, setGerarNota] = useState(nfseAtivo(filial) && !!mensalista.cpf_cnpj);
 
   // Forma padrão = dinheiro (como na saída do pátio).
   useEffect(() => {
@@ -125,11 +126,13 @@ export function ReceberModal({ mensalista, formas, semCaixa, perfil, onAbrirCaix
             <label>Observação (opcional)</label>
             <input value={observacao} onChange={(e) => setObservacao(e.target.value)} />
           </div>
-          <label className="campo-check" style={{ marginBottom: 10 }}>
-            <input type="checkbox" checked={gerarNota} onChange={(e) => setGerarNota(e.target.checked)} />
-            Gerar nota fiscal (DPS)
-            {!mensalista.cpf_cnpj && <span className="suave"> — mensalista sem CPF/CNPJ, sai sem identificação</span>}
-          </label>
+          {nfseAtivo(filial) && (
+            <label className="campo-check" style={{ marginBottom: 10 }}>
+              <input type="checkbox" checked={gerarNota} onChange={(e) => setGerarNota(e.target.checked)} />
+              Gerar nota fiscal (DPS)
+              {!mensalista.cpf_cnpj && <span className="suave"> — mensalista sem CPF/CNPJ, sai sem identificação</span>}
+            </label>
+          )}
           {valorInvalido && <p className="aviso">Informe o valor pago.</p>}
           <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
             <button type="button" className="btn-ghost" onClick={onFechar}>Cancelar</button>
@@ -206,7 +209,7 @@ function SelecionarMensalistaModal({ onSelecionar, onFechar }) {
  * imprimir/mostrar (o chamador já tem seu próprio modal de ticket, ex.: Pátio
  * e Mensalistas). `onConcluido(ticket, celularSugerido)` fecha o fluxo.
  */
-export default function ReceberMensalidadeFluxo({ perfil, formas, caixaAberto, onCaixaAberto, onConcluido, onFechar }) {
+export default function ReceberMensalidadeFluxo({ perfil, formas, caixaAberto, onCaixaAberto, onConcluido, onFechar, filial }) {
   const [mensalista, setMensalista] = useState(null); // null = ainda escolhendo na lista
   const [erro, setErro] = useState('');
 
@@ -215,7 +218,7 @@ export default function ReceberMensalidadeFluxo({ perfil, formas, caixaAberto, o
     const { error, pagamento } = await receberMensalidade({ perfil, mensalista: m, dtPagamento, valor, forma, proximo, observacao });
     if (error) { setErro(error); return; }
     let ticketRps = null;
-    if (gerarNota) {
+    if (gerarNota && nfseAtivo(filial)) {
       // Best-effort (mesmo espírito da fidelidade no Pátio): o pagamento já
       // está gravado, uma falha aqui não pode travar o comprovante — se der
       // errado, a nota simplesmente não aparece em Fiscal.
@@ -253,7 +256,7 @@ export default function ReceberMensalidadeFluxo({ perfil, formas, caixaAberto, o
         <div className="modal aviso" onClick={(e) => e.stopPropagation()}>{erro}</div>
       </div>}
       <ReceberModal mensalista={mensalista} formas={formas} semCaixa={!caixaAberto}
-        perfil={perfil} onAbrirCaixa={onCaixaAberto}
+        perfil={perfil} filial={filial} onAbrirCaixa={onCaixaAberto}
         onConfirmar={confirmar} onFechar={onFechar} />
     </>
   );

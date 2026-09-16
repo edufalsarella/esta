@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase.js';
 import { obterTema, aplicarTema } from '../lib/tema.js';
 import { imprimePedidosDaCabine, definirImprimePedidosDaCabine } from '../lib/preferenciasNavegador.js';
 import { conectarImpressoraBluetooth, impressoraBluetoothSalva, esquecerImpressoraBluetooth } from '../lib/bluetoothPrinter.js';
-import { ehFornecedor, ehSupervisor } from '../lib/acesso.js';
+import { ehFornecedor, ehSupervisor, nfseAtivo } from '../lib/acesso.js';
 import CidadeBusca from '../componentes/CidadeBusca.jsx';
 
 // Dados do estacionamento (nome/endereço/CNPJ/fiscal). Só o fornecedor altera:
@@ -461,6 +461,16 @@ export default function Configuracoes({ perfil }) {
         </p>
         {!filial ? 'Carregando…' : (
           <form onSubmit={salvar}>
+            <label className="campo-check" style={{ marginBottom: 4 }}>
+              <input type="checkbox" checked={nfseAtivo(filial)} disabled={!podeEditar}
+                onChange={(e) => setNfse('habilitado', e.target.checked)} />
+              Esta filial está habilitada pela prefeitura pra emitir NFS-e/RPS/DPS?
+            </label>
+            <p className="suave" style={{ fontSize: 11, marginTop: 0, marginBottom: 10 }}>
+              Desmarcado, a opção "NFS-e / RPS/DPS" some do menu principal e o botão "Gerar DPS"
+              some da saída do pátio — evita mexer numa rotina fiscal que o cliente ainda não usa.
+              Os campos abaixo continuam aqui, prontos pra quando a liberação da prefeitura sair.
+            </p>
             <label className="campo-check" style={{ marginBottom: 4 }}>
               <input type="checkbox" checked={!!filial.config?.nfse?.emitirTodaSaida} disabled={!podeEditar}
                 onChange={(e) => setNfse('emitirTodaSaida', e.target.checked)} />

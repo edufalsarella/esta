@@ -36,6 +36,20 @@ export function podeAcessar(perfil, pathname) {
   return rotas === null || rotas.includes(pathname);
 }
 
+/**
+ * Filial habilitada pela prefeitura pra emitir NFS-e/RPS/DPS? Controla se o
+ * menu "NFS-e / RPS/DPS" aparece (ver Layout.jsx) e o botão "Gerar DPS" na
+ * saída do pátio (ver Patio.jsx) — evita cliente sem liberação mexer numa
+ * rotina fiscal que não usa. `habilitado` explícito (Configurações → Fiscal)
+ * manda; sem ele, cai pra "já escolheu um padrão de envio alguma vez?", pra
+ * quem já usava fiscal antes deste checkbox existir continuar vendo o menu
+ * sem precisar marcar nada.
+ */
+export function nfseAtivo(filial) {
+  const habilitado = filial?.config?.nfse?.habilitado;
+  return habilitado != null ? !!habilitado : !!filial?.config?.nfse?.padrao;
+}
+
 export const ehFornecedor = (perfil) => perfil?.papel === 'fornecedor';
 /** Fornecedor tem, por definição, todo poder de supervisor. */
 export const ehSupervisor = (perfil) => perfil?.papel === 'supervisor' || ehFornecedor(perfil);
