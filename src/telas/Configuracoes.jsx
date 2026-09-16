@@ -208,8 +208,6 @@ export default function Configuracoes({ perfil }) {
         {erro && <div className="aviso">{erro}</div>}
         {!filial ? 'Carregando…' : (
           <>
-            {salvo && <p className="ok-txt">Salvo.</p>}
-            <form onSubmit={salvar}>
               <div className="linha-form" style={{ marginBottom: 10 }}>
                 <div className="campo" style={{ maxWidth: 160 }}>
                   <label>Núm. Cliente</label>
@@ -336,10 +334,6 @@ export default function Configuracoes({ perfil }) {
                 Desmarcado, o item "Reservas de vaga" some do menu principal — pra quem não
                 trabalha com reserva antecipada, evita uma tela sem uso.
               </p>
-              {podeEditar
-                ? <button className="btn-primary" type="submit">Salvar</button>
-                : <p className="suave">Somente leitura — esses dados só são alterados pelo fornecedor do sistema.</p>}
-            </form>
           </>
         )}
       </div>
@@ -354,7 +348,7 @@ export default function Configuracoes({ perfil }) {
           faz parte dessa integração.
         </p>
         {!filial ? 'Carregando…' : (
-          <form onSubmit={salvar}>
+          <>
             <label className="campo-check" style={{ marginBottom: 4 }}>
               <input type="checkbox" checked={!!filial.config?.infinitepay?.ativo} disabled={!podeEditar}
                 onChange={(e) => setInfinitePay('ativo', e.target.checked)} />
@@ -375,10 +369,7 @@ export default function Configuracoes({ perfil }) {
                 usado nessa checagem é o do cadastro acima — não precisa digitar de novo.
               </span>
             </div>
-            {podeEditar
-              ? <button className="btn-primary" type="submit">Salvar</button>
-              : <p className="suave">Somente leitura — esses dados só são alterados pelo fornecedor do sistema.</p>}
-          </form>
+          </>
         )}
       </div>
 
@@ -391,7 +382,7 @@ export default function Configuracoes({ perfil }) {
           <code>docs/SEMPARAR.md</code>.
         </p>
         {!filial ? 'Carregando…' : (
-          <form onSubmit={salvar}>
+          <>
             <label className="campo-check" style={{ marginBottom: 4 }}>
               <input type="checkbox" checked={!!filial.config?.semparar?.ativo} disabled={!podeEditar}
                 onChange={(e) => setSemParar('ativo', e.target.checked)} />
@@ -414,10 +405,7 @@ export default function Configuracoes({ perfil }) {
                   onChange={(e) => setSemParar('hash', e.target.value.trim())} />
               </div>
             </div>
-            {podeEditar
-              ? <button className="btn-primary" type="submit">Salvar</button>
-              : <p className="suave">Somente leitura — esses dados só são alterados pelo fornecedor do sistema.</p>}
-          </form>
+          </>
         )}
       </div>
 
@@ -635,6 +623,12 @@ export default function Configuracoes({ perfil }) {
               </div>
             </div>
 
+            <p className="suave" style={{ fontSize: 11, marginTop: 0, marginBottom: 10 }}>
+              Este botão grava de uma vez tudo desta tela — Dados do estacionamento, InfiniteTap,
+              Sem Parar e Fiscal.
+            </p>
+            {erro && <div className="aviso">{erro}</div>}
+            {salvo && <p className="ok-txt">Salvo.</p>}
             {podeEditar
               ? <button className="btn-primary" type="submit">Salvar</button>
               : <p className="suave">Somente leitura — esses dados só são alterados pelo fornecedor do sistema.</p>}
