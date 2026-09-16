@@ -54,6 +54,7 @@ export default function Layout({ perfil }) {
   const [filiais, setFiliais] = useState([]); // só o fornecedor tem mais de uma
   const [avisoLimpeza, setAvisoLimpeza] = useState(null); // {elegiveis} ou null
   const [nfseAtivo, setNfseAtivo] = useState(true); // Fiscal > Configurações → "habilitada pela prefeitura?"
+  const [usaReservas, setUsaReservas] = useState(true); // Configurações → "usa reservas de vaga?"
   const location = useLocation();
 
   // Avisa a cada login (só quem pode agir: supervisor/fornecedor) que tem
@@ -78,6 +79,7 @@ export default function Layout({ perfil }) {
           const atual = (data || []).find((f) => f.id === perfil.filial_ativa);
           setNomeFilial(atual ? rotuloFilial(atual) : '');
           setNfseAtivo(calcularNfseAtivo(atual));
+          setUsaReservas(atual?.config?.patio?.usaReservas ?? true);
         });
       return;
     }
@@ -85,6 +87,7 @@ export default function Layout({ perfil }) {
       .then(({ data }) => {
         setNomeFilial(data ? rotuloFilial(data) : '');
         setNfseAtivo(calcularNfseAtivo(data));
+        setUsaReservas(data?.config?.patio?.usaReservas ?? true);
       });
   }, [perfil]);
 
@@ -147,7 +150,9 @@ export default function Layout({ perfil }) {
   const grupos = GRUPOS
     .map((g) => ({
       ...g,
-      itens: g.itens.filter((i) => podeAcessar(perfil, i.to) && (i.to !== '/fiscal' || nfseAtivo)),
+      itens: g.itens.filter((i) => podeAcessar(perfil, i.to)
+        && (i.to !== '/fiscal' || nfseAtivo)
+        && (i.to !== '/reservas' || usaReservas)),
     }))
     .filter((g) => g.itens.length > 0);
   // Fornecedor-only: acesso.js não distingue supervisor de fornecedor (os

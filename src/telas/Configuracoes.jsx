@@ -327,6 +327,15 @@ export default function Configuracoes({ perfil }) {
                 no Chrome/Android; sem custo, sem servidor); nunca preenche a placa sozinho —
                 sempre mostra o texto reconhecido pra conferir/corrigir antes de usar.
               </p>
+              <label className="campo-check" style={{ marginBottom: 4 }}>
+                <input type="checkbox" checked={filial.config?.patio?.usaReservas ?? true} disabled={!podeEditar}
+                  onChange={(e) => setPatio('usaReservas', e.target.checked)} />
+                Usa reservas de vaga?
+              </label>
+              <p className="suave" style={{ fontSize: 11, marginTop: 0, marginBottom: 10 }}>
+                Desmarcado, o item "Reservas de vaga" some do menu principal — pra quem não
+                trabalha com reserva antecipada, evita uma tela sem uso.
+              </p>
               {podeEditar
                 ? <button className="btn-primary" type="submit">Salvar</button>
                 : <p className="suave">Somente leitura — esses dados só são alterados pelo fornecedor do sistema.</p>}
