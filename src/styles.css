@@ -107,6 +107,30 @@ th { color: var(--suave); font-size: 12px; text-transform: uppercase; }
 .kpi-valor { font-size: 24px; font-weight: 800; margin-top: 4px; overflow-wrap: break-word; }
 .kpi.destaque .kpi-valor { color: var(--ambar); }
 
+/* Gráficos leves do BI/Painel (src/componentes/Graficos.jsx) — sempre nas
+   variáveis de cor do app, pra acompanhar claro/escuro automaticamente. */
+.grafico-linha-wrap { position: relative; margin-top: 4px; }
+.grafico-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.grafico-grade { stroke: var(--linha); stroke-width: 1; }
+.grafico-eixo-texto { fill: var(--suave); font-size: 11px; }
+.grafico-area { fill: var(--ambar); fill-opacity: .1; stroke: none; }
+.grafico-linha { fill: none; stroke: var(--ambar); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.grafico-crosshair { stroke: var(--suave); stroke-width: 1; stroke-dasharray: 3 3; }
+.grafico-ponto { fill: var(--ambar); stroke: var(--panel); stroke-width: 2; }
+.grafico-ponto-fim { fill: var(--ambar); stroke: var(--panel); stroke-width: 2; }
+.grafico-tooltip { position: absolute; top: 0; transform: translate(-50%, -100%); background: var(--panel2);
+  border: 1px solid var(--linha); border-radius: 8px; padding: 6px 10px; font-size: 12px; white-space: nowrap;
+  pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
+.grafico-tooltip strong { display: block; font-size: 14px; color: var(--texto); }
+.grafico-tooltip span { color: var(--suave); }
+
+.grafico-barras { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.grafico-barra-linha { display: grid; grid-template-columns: minmax(80px, 30%) 1fr auto; align-items: center; gap: 10px; }
+.grafico-barra-rotulo { font-size: 13px; color: var(--suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grafico-barra-trilha { background: var(--panel2); border-radius: 6px; height: 12px; overflow: hidden; }
+.grafico-barra-fill { background: var(--ambar); height: 100%; border-radius: 0 6px 6px 0; }
+.grafico-barra-valor { font-size: 13px; font-weight: 700; text-align: right; white-space: nowrap; }
+
 .status { font-size: 12px; padding: 2px 8px; border-radius: 20px; border: 1px solid var(--linha); text-transform: uppercase; }
 .status-gerada { color: var(--ambar); border-color: var(--ambar); }
 .status-autorizada { color: var(--ok); border-color: var(--ok); }

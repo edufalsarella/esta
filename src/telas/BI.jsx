@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { hojeISO, dataDeISO, dataHoraDe, limitesDiaLocal, fmtBRL, fmtHora, fmtDataBR } from '../lib/tempo.js';
+import { GraficoLinha, GraficoBarras } from '../componentes/Graficos.jsx';
 import { horas, minuto, minutosParaHHMM } from '../../packages/tarifacao/tarifacao.ts';
 
 function escapeHtml(s) {
@@ -559,6 +560,10 @@ export default function BI({ perfil }) {
                 Recebido = Faturado − Descontos (convênio) − Bônus fidelidade — o que realmente
                 entrou em dinheiro/forma de pagamento naquele dia (convênio é cobrado dele depois).
               </p>
+              <GraficoLinha
+                pontos={dados.resumoDiario.map((d) => ({ rotulo: fmtDataBR(d.dia), valor: d.faturado }))}
+                formatarValor={fmtBRL}
+              />
               <div className="tabela-scroll">
                 <table>
                   <thead><tr><th>Data</th><th style={{ textAlign: 'right' }}>Faturado</th><th style={{ textAlign: 'right' }}>Desconto</th><th style={{ textAlign: 'right' }}>Bônus</th><th style={{ textAlign: 'right' }}>Recebido</th></tr></thead>
@@ -588,6 +593,12 @@ export default function BI({ perfil }) {
           <div className="card">
             <h2>Por operador ({Object.keys(dados.porOperador).length})</h2>
             <p className="suave">Saídas + mensalidades recebidas + vendas de produto, por quem processou cada uma.</p>
+            <GraficoBarras
+              itens={Object.entries(dados.porOperador)
+                .sort(([, a], [, b]) => b.faturado - a.faturado)
+                .map(([nome, v]) => ({ rotulo: nome, valor: v.faturado }))}
+              formatarValor={fmtBRL}
+            />
             <table>
               <thead><tr><th>Operador</th><th style={{ textAlign: 'right' }}>Qtde</th><th style={{ textAlign: 'right' }}>Faturado</th></tr></thead>
               <tbody>
@@ -642,6 +653,12 @@ export default function BI({ perfil }) {
           <div className="card">
             <h2>Recebido por forma de pagamento</h2>
             <p className="suave">Saídas (avulso, convênio, serviços) + mensalidades, somados por forma.</p>
+            <GraficoBarras
+              itens={Object.entries(dados.recebidoPorForma)
+                .sort(([, a], [, b]) => b - a)
+                .map(([forma, valor]) => ({ rotulo: forma, valor }))}
+              formatarValor={fmtBRL}
+            />
             <table><tbody>
               {Object.entries(dados.recebidoPorForma).map(([k, v]) => (
                 <tr key={k}><td>{k}</td><td style={{ textAlign: 'right' }}>{fmtBRL(v)}</td></tr>
