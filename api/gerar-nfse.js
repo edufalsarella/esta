@@ -5,11 +5,10 @@
 // Variáveis de ambiente exigidas (Vercel -> Project Settings -> Environment
 // Variables; nunca comitar, nunca colar num chat):
 //   VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY   (já configuradas pro app)
-//   NFSE_CERTIFICADO_PFX_B64                     (o .pfx inteiro, em base64)
-//   NFSE_CERTIFICADO_SENHA                       (senha do .pfx)
+//   SUPABASE_SERVICE_ROLE_KEY                    (pra ler fiscal_certificados — ver certificado-fiscal.js)
 import { createClient } from '@supabase/supabase-js';
 import { gerarXmlDPS, gerarXmlAbrasfLoteRps, parseAbrasfEnvioResposta } from '../src/lib/fiscal.js';
-import { extrairChaveECertificado, assinarXmlDps, enviarDps, assinarLoteAbrasf, enviarAbrasf, autoverificarAssinatura } from '../src/servidor/nfse.js';
+import { extrairChaveECertificado, assinarXmlDps, enviarDps, assinarLoteAbrasf, enviarAbrasf, autoverificarAssinatura, carregarCertificadoDaFilial } from '../src/servidor/nfse.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ erro: 'Método não suportado.' }); return; }
@@ -20,15 +19,13 @@ export default async function handler(req, res) {
   const { notaId } = req.body || {};
   if (!notaId) { res.status(400).json({ erro: 'notaId é obrigatório.' }); return; }
 
-  const pfxB64 = process.env.NFSE_CERTIFICADO_PFX_B64;
-  const senha = process.env.NFSE_CERTIFICADO_SENHA;
-  if (!pfxB64 || !senha) {
-    res.status(500).json({ erro: 'Certificado não configurado (NFSE_CERTIFICADO_PFX_B64 / NFSE_CERTIFICADO_SENHA nas Environment Variables do Vercel).' });
-    return;
-  }
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceKey) { res.status(500).json({ erro: 'Falta SUPABASE_SERVICE_ROLE_KEY nas Environment Variables do Vercel.' }); return; }
 
   // createClient com o token do usuário: as consultas abaixo respeitam a
-  // mesma RLS por filial de sempre — a function não usa chave de serviço.
+  // mesma RLS por filial de sempre — a function não usa chave de serviço
+  // pra nada além de buscar o certificado (fiscal_certificados não tem RLS
+  // pra authenticated de propósito, ver 0054_fiscal_certificado.sql).
   const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: auth } },
   });
@@ -44,6 +41,17 @@ export default async function handler(req, res) {
   const { data: filial, error: errFilial } = await supabase.from('filiais').select('*').eq('id', nota.filial_id).maybeSingle();
   if (errFilial || !filial) { res.status(500).json({ erro: errFilial?.message || 'Filial não encontrada.' }); return; }
 
+  const admin = createClient(process.env.VITE_SUPABASE_URL, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  let pfxBuffer, senha;
+  try {
+    ({ pfxBuffer, senha } = await carregarCertificadoDaFilial(admin, filial.id));
+  } catch (e) {
+    res.status(500).json({ erro: String(e?.message || e) });
+    return;
+  }
+
   const ambiente = filial.config?.nfse?.ambiente === 'producao' ? 'producao' : 'homologacao';
   const padrao = filial.config?.nfse?.padrao || 'padrao_nacional_campinas';
 
@@ -56,7 +64,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    const pfxBuffer = Buffer.from(pfxB64, 'base64');
     const { chavePem, certPem } = extrairChaveECertificado(pfxBuffer, senha);
 
     if (padrao === 'abrasf') {

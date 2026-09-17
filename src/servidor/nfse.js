@@ -1,13 +1,31 @@
 // Assinatura (XMLDSig) e transmissão (mTLS) do DPS pro Sistema Nacional NFS-e
 // (ADN). SÓ roda em Node (Vercel Function, api/gerar-nfse.js) — nunca é
 // importado por telas/componentes, então nunca entra no bundle do navegador.
-// O certificado (.pfx) e a senha vêm de variável de ambiente, nunca do app.
+// O certificado (.pfx) e a senha vêm de fiscal_certificados (um por filial —
+// ver carregarCertificadoDaFilial e 0054_fiscal_certificado.sql), nunca do
+// código nem de variável de ambiente.
 import forge from 'node-forge';
 import { SignedXml } from 'xml-crypto';
 import { DOMParser } from '@xmldom/xmldom';
 import xpath from 'xpath';
 import { gzipSync } from 'node:zlib';
 import https from 'node:https';
+
+/**
+ * Busca o certificado (.pfx em base64 + senha) da filial, usando o client de
+ * `service_role` (fiscal_certificados não tem NENHUMA policy de RLS pra
+ * `authenticated` — ver 0054_fiscal_certificado.sql). Quem chama precisa ter
+ * confirmado ANTES, com o client normal (com RLS), que `filialId` é mesmo a
+ * filial de quem fez a requisição — este client de serviço bypassa RLS
+ * inteira, então a checagem de "é dessa filial mesmo?" tem que vir de fora.
+ */
+export async function carregarCertificadoDaFilial(admin, filialId) {
+  const { data, error } = await admin.from('fiscal_certificados')
+    .select('pfx_b64, senha').eq('filial_id', filialId).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('Certificado fiscal não configurado pra esta filial (Configurações → Fiscal, só o fornecedor).');
+  return { pfxBuffer: Buffer.from(data.pfx_b64, 'base64'), senha: data.senha };
+}
 
 /**
  * Extrai a chave privada (PEM) e o certificado (PEM) de um .pfx (PKCS#12).

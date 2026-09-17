@@ -4,7 +4,7 @@
 // (mTLS) do envio; ver api/gerar-nfse.js.
 import { createClient } from '@supabase/supabase-js';
 import { gerarXmlAbrasfConsulta, parseAbrasfConsultaResposta } from '../src/lib/fiscal.js';
-import { extrairChaveECertificado, enviarAbrasf, assinarConsultaAbrasf } from '../src/servidor/nfse.js';
+import { extrairChaveECertificado, enviarAbrasf, assinarConsultaAbrasf, carregarCertificadoDaFilial } from '../src/servidor/nfse.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ erro: 'Método não suportado.' }); return; }
@@ -15,12 +15,8 @@ export default async function handler(req, res) {
   const { notaId } = req.body || {};
   if (!notaId) { res.status(400).json({ erro: 'notaId é obrigatório.' }); return; }
 
-  const pfxB64 = process.env.NFSE_CERTIFICADO_PFX_B64;
-  const senha = process.env.NFSE_CERTIFICADO_SENHA;
-  if (!pfxB64 || !senha) {
-    res.status(500).json({ erro: 'Certificado não configurado (NFSE_CERTIFICADO_PFX_B64 / NFSE_CERTIFICADO_SENHA nas Environment Variables do Vercel).' });
-    return;
-  }
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceKey) { res.status(500).json({ erro: 'Falta SUPABASE_SERVICE_ROLE_KEY nas Environment Variables do Vercel.' }); return; }
 
   const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: auth } },
@@ -39,8 +35,18 @@ export default async function handler(req, res) {
 
   const ambiente = filial.config?.nfse?.ambiente === 'producao' ? 'producao' : 'homologacao';
 
+  const admin = createClient(process.env.VITE_SUPABASE_URL, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  let pfxBuffer, senha;
   try {
-    const pfxBuffer = Buffer.from(pfxB64, 'base64');
+    ({ pfxBuffer, senha } = await carregarCertificadoDaFilial(admin, filial.id));
+  } catch (e) {
+    res.status(500).json({ erro: String(e?.message || e) });
+    return;
+  }
+
+  try {
     const { chavePem, certPem } = extrairChaveECertificado(pfxBuffer, senha);
     // Assina o XML solto (com URI="" — ver assinarConsultaAbrasf) e deixa o
     // envelope SOAP pro enviarAbrasf, como no envio.

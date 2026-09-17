@@ -23,6 +23,12 @@ export default function Configuracoes({ perfil }) {
   const [previaLimpeza, setPreviaLimpeza] = useState(null);
   const [limpando, setLimpando] = useState(false);
   const [erroLimpeza, setErroLimpeza] = useState('');
+  const [certStatus, setCertStatus] = useState(null);
+  const [certArquivo, setCertArquivo] = useState(null); // { nome, base64 }
+  const [certSenha, setCertSenha] = useState('');
+  const [salvandoCert, setSalvandoCert] = useState(false);
+  const [erroCert, setErroCert] = useState('');
+  const [msgCert, setMsgCert] = useState('');
   const podeEditar = ehFornecedor(perfil);
   const podeLimpar = ehSupervisor(perfil);
 
@@ -68,6 +74,60 @@ export default function Configuracoes({ perfil }) {
     if (error) setErro(error.message); else setFilial(data);
   }
   useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
+
+  /**
+   * Certificado fiscal (.pfx) da filial atual — pra fornecedor que troca de
+   * filial (EscolherFilial), refaz a consulta a cada troca. Vive em
+   * fiscal_certificados (api/certificado-fiscal.js), nunca em `filiais` —
+   * ver 0054_fiscal_certificado.sql pro porquê.
+   */
+  async function carregarStatusCertificado() {
+    if (!podeEditar) return;
+    const { data: sessao } = await supabase.auth.getSession();
+    const resp = await fetch('/api/certificado-fiscal', {
+      headers: { Authorization: `Bearer ${sessao.session?.access_token}` },
+    });
+    const dados = await resp.json();
+    if (resp.ok) setCertStatus(dados);
+  }
+  useEffect(() => { carregarStatusCertificado(); /* eslint-disable-next-line */ }, [perfil.filial_id]);
+
+  function escolherArquivoCertificado(e) {
+    const arquivo = e.target.files?.[0];
+    if (!arquivo) return;
+    setErroCert(''); setMsgCert('');
+    const leitor = new FileReader();
+    leitor.onload = () => {
+      // readAsDataURL já devolve base64 (depois de "base64,") — mais simples
+      // que montar o base64 na mão a partir do ArrayBuffer.
+      const base64 = String(leitor.result).split(',')[1] || '';
+      setCertArquivo({ nome: arquivo.name, base64 });
+    };
+    leitor.onerror = () => setErroCert('Não consegui ler o arquivo.');
+    leitor.readAsDataURL(arquivo);
+  }
+
+  async function salvarCertificado() {
+    setErroCert(''); setMsgCert('');
+    if (!certArquivo) { setErroCert('Escolha o arquivo .pfx primeiro.'); return; }
+    if (!certSenha) { setErroCert('Digite a senha do certificado.'); return; }
+    setSalvandoCert(true);
+    try {
+      const { data: sessao } = await supabase.auth.getSession();
+      const resp = await fetch('/api/certificado-fiscal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessao.session?.access_token}` },
+        body: JSON.stringify({ pfxB64: certArquivo.base64, senha: certSenha }),
+      });
+      const dados = await resp.json();
+      if (!resp.ok) { setErroCert(dados.erro || `Falha ao salvar (${resp.status}).`); return; }
+      setMsgCert('Certificado salvo.');
+      setCertArquivo(null); setCertSenha('');
+      carregarStatusCertificado();
+    } finally {
+      setSalvandoCert(false);
+    }
+  }
 
   async function salvar(e) {
     e.preventDefault();
@@ -456,6 +516,41 @@ export default function Configuracoes({ perfil }) {
           Necessários pra gerar e enviar o DPS/NFS-e (Sistema Nacional NFS-e). Sem eles
           o documento é rejeitado mesmo assinado corretamente.
         </p>
+
+        {podeEditar && (
+          <div style={{ border: '1px solid var(--linha)', borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
+            <label style={{ display: 'block', marginBottom: 6 }}>Certificado digital (.pfx) desta filial</label>
+            <p className="suave" style={{ fontSize: 11, marginTop: 0, marginBottom: 8 }}>
+              Assina e autentica o envio do RPS/DPS pra prefeitura — cada filial (CNPJ) tem o seu
+              próprio, nunca compartilhado com outra. Depois de salvo, o arquivo e a senha não
+              aparecem mais aqui, nem em lugar nenhum do app — só é possível trocar por outro.
+            </p>
+            {certStatus && (
+              <p className="suave" style={{ marginBottom: 8 }}>
+                {certStatus.configurado
+                  ? <>Certificado configurado — atualizado em {new Date(certStatus.atualizadoEm).toLocaleString('pt-BR')}.</>
+                  : 'Nenhum certificado configurado ainda pra esta filial.'}
+              </p>
+            )}
+            <div className="linha-form" style={{ alignItems: 'flex-end', marginBottom: 6 }}>
+              <div className="campo">
+                <label>Arquivo .pfx</label>
+                <input type="file" accept=".pfx,.p12" onChange={escolherArquivoCertificado} />
+                {certArquivo && <p className="suave" style={{ fontSize: 11, margin: '4px 0 0' }}>{certArquivo.nome}</p>}
+              </div>
+              <div className="campo" style={{ maxWidth: 200 }}>
+                <label>Senha do certificado</label>
+                <input type="password" value={certSenha} onChange={(e) => setCertSenha(e.target.value)} />
+              </div>
+              <button type="button" className="btn-ghost" onClick={salvarCertificado} disabled={salvandoCert}>
+                {salvandoCert ? 'Salvando…' : 'Salvar certificado'}
+              </button>
+            </div>
+            {erroCert && <p className="aviso">{erroCert}</p>}
+            {msgCert && <p className="ok-txt">{msgCert}</p>}
+          </div>
+        )}
+
         {!filial ? 'Carregando…' : (
           <form onSubmit={salvar}>
             <label className="campo-check" style={{ marginBottom: 4 }}>
