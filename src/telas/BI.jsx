@@ -29,6 +29,16 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
     ['Faturado (avulso + serviços + convênio + antecipados + bônus + mensalidades + produtos)', fmtBRL(dados.faturado)],
   ].map(([r, v]) => `<p><strong>${escapeHtml(r)}:</strong> ${escapeHtml(v)}</p>`).join('');
 
+  const porOperador = Object.entries(dados.porOperador)
+    .sort(([, a], [, b]) => b.faturado - a.faturado)
+    .map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td style="text-align:right">${v.qtd}</td><td style="text-align:right">${escapeHtml(fmtBRL(v.faturado))}</td></tr>`).join('');
+  const resumoDiario = dados.resumoDiario.map((d) => `<tr>
+      <td>${escapeHtml(fmtDataBR(d.dia))}</td>
+      <td style="text-align:right">${escapeHtml(fmtBRL(d.faturado))}</td>
+      <td style="text-align:right">${escapeHtml(fmtBRL(d.desconto))}</td>
+      <td style="text-align:right">${escapeHtml(fmtBRL(d.bonus))}</td>
+      <td style="text-align:right">${escapeHtml(fmtBRL(d.recebido))}</td>
+    </tr>`).join('');
   const porTipo = Object.entries(dados.porTipo)
     .map(([k, v]) => `<tr><td>${escapeHtml(rotuloTipo(k))}</td><td style="text-align:right">${v}</td></tr>`).join('');
   const porForma = Object.entries(dados.recebidoPorForma)
@@ -109,6 +119,13 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
       <h1>Painel / BI</h1>
       <p class="linha-end">Período: ${escapeHtml(de.split('-').reverse().join('/'))} a ${escapeHtml(ate.split('-').reverse().join('/'))}</p>
       ${kpis}
+      ${dados.resumoDiario.length > 1 ? `
+      <h2>Resumo por dia</h2>
+      <table><thead><tr><th>Data</th><th style="text-align:right">Faturado</th><th style="text-align:right">Desconto</th><th style="text-align:right">Bônus</th><th style="text-align:right">Recebido</th></tr></thead>
+      <tbody>${resumoDiario}</tbody></table>` : ''}
+      <h2>Por operador</h2>
+      <table><thead><tr><th>Operador</th><th style="text-align:right">Qtde</th><th style="text-align:right">Faturado</th></tr></thead>
+      <tbody>${porOperador || '<tr><td colspan="3">Sem movimentação no período.</td></tr>'}</tbody></table>
       <h2>Por tipo</h2>
       <table><tbody>${porTipo || '<tr><td>—</td></tr>'}</tbody></table>
       <h2>Cancelados por tipo</h2>
@@ -148,6 +165,18 @@ function textoRelatorio(dados, de, ate, filial) {
   linhas.push(`Antecipados: ${fmtBRL(dados.antecipados)}`);
   linhas.push(`Bônus fidelidade: ${fmtBRL(dados.bonus)}`);
   linhas.push(`Tempo médio: ${fmtHora(dados.tempoMedio)}`);
+  linhas.push('');
+  if (dados.resumoDiario.length > 1) {
+    linhas.push('Resumo por dia (data — faturado / desconto / bônus / recebido):');
+    for (const d of dados.resumoDiario) {
+      linhas.push(`  ${fmtDataBR(d.dia)} — ${fmtBRL(d.faturado)} / ${fmtBRL(d.desconto)} / ${fmtBRL(d.bonus)} / ${fmtBRL(d.recebido)}`);
+    }
+    linhas.push('');
+  }
+  linhas.push('Por operador:');
+  const porOperador = Object.entries(dados.porOperador).sort(([, a], [, b]) => b.faturado - a.faturado);
+  if (porOperador.length) for (const [nome, v] of porOperador) linhas.push(`  ${nome}: ${v.qtd} · ${fmtBRL(v.faturado)}`);
+  else linhas.push('  Sem movimentação no período.');
   linhas.push('');
   linhas.push('Por tipo:');
   for (const [k, v] of Object.entries(dados.porTipo)) linhas.push(`  ${rotuloTipo(k)}: ${v}`);
@@ -283,6 +312,29 @@ export default function BI({ perfil }) {
       .order('criado_em', { ascending: false });
     if (errProd) { setErro(errProd.message); return; }
 
+    // Nome de quem processou cada saída/mensalidade/venda (ver "Por
+    // operador" abaixo) — um select só, reaproveitado nos três.
+    const { data: perfis } = await supabase.from('perfis').select('id, nome');
+    const nomeDoOperador = Object.fromEntries((perfis || []).map((p) => [p.id, p.nome]));
+    const SEM_OPERADOR = '—';
+
+    // "Por operador" (qtd + faturado) e "Resumo por dia" (data, faturado,
+    // desconto, bônus, recebido) — cada evento que já entra no Faturado geral
+    // (saída, mensalidade, produto) soma aqui também, só quebrado por quem
+    // processou e por dia, em vez do período inteiro de uma vez.
+    const porOperador = {};
+    const porDia = {};
+    function somaOperador(id, faturado) {
+      const nome = nomeDoOperador[id] || SEM_OPERADOR;
+      const e = (porOperador[nome] ||= { qtd: 0, faturado: 0 });
+      e.qtd++; e.faturado += faturado;
+    }
+    function somaDia(dia, { faturado = 0, desconto = 0, bonus = 0 }) {
+      if (!dia) return;
+      const e = (porDia[dia] ||= { faturado: 0, desconto: 0, bonus: 0 });
+      e.faturado += faturado; e.desconto += desconto; e.bonus += bonus;
+    }
+
     const porTipo = {};
     let recebidoSaidas = 0, tabelaCheia = 0, valorServicos = 0, valorAvulso = 0, valorConvenioTotal = 0,
       antecipadoTotal = 0, bonusTotal = 0, minutosTotal = 0, saidasComTempo = 0;
@@ -299,6 +351,12 @@ export default function BI({ perfil }) {
       // conferir a conta batendo.
       antecipadoTotal += Number(m.valor_antecipado || 0);
       bonusTotal += Number(m.bonus_fidelidade || 0);
+      // Mesma parcela desta saída na conta do Faturado geral, só que quebrada
+      // por quem processou e por dia (ver "Por operador"/"Resumo por dia").
+      const faturadoDaSaida = Number(m.valor || 0) + Number(m.valor_convenio || 0)
+        + Number(m.valor_antecipado || 0) + Number(m.bonus_fidelidade || 0);
+      somaOperador(m.usuario_saida, faturadoDaSaida);
+      somaDia(m.dt_saida, { faturado: faturadoDaSaida, desconto: Number(m.valor_convenio || 0), bonus: Number(m.bonus_fidelidade || 0) });
       // Serviço marcado: "valor do serviço" é só a soma dos valores FIXOS
       // dos serviços (valor_servico/pede-valor) — o resto do valor cobrado é
       // a estadia (faixas), que entra no Avulso igual qualquer outro carro
@@ -338,6 +396,10 @@ export default function BI({ perfil }) {
       forma: descForma[p.forma_pagamento] || p.forma_pagamento,
     }));
     const mensalidadesTotal = mensalidades.reduce((s, p) => s + p.valor, 0);
+    for (const p of mensPagtos || []) {
+      somaOperador(p.recebido_por, Number(p.valor_pago || 0));
+      somaDia(p.dt_pagamento, { faturado: Number(p.valor_pago || 0) });
+    }
 
     const produtosVendidos = (vendasProdutos || []).map((v) => ({
       id: v.id, criado_em: v.criado_em,
@@ -349,6 +411,18 @@ export default function BI({ perfil }) {
       estoque: v.produtos ? Number(v.produtos.quantidade_estoque || 0) : null,
     }));
     const produtosTotal = produtosVendidos.reduce((s, v) => s + v.valor, 0);
+    for (const v of vendasProdutos || []) {
+      somaOperador(v.operador_id, Number(v.valor_total || 0));
+      somaDia((v.criado_em || '').slice(0, 10), { faturado: Number(v.valor_total || 0) });
+    }
+
+    // Resumo por dia, em lista ordenada — pedido pra período longo (ex.: um
+    // mês inteiro): recebido = faturado menos o que não veio em dinheiro
+    // agora (convênio, cobrado do convênio depois — e bônus, que não é
+    // dinheiro nenhum), mesma conta que "Faturado" já faz pro período inteiro.
+    const resumoDiario = Object.entries(porDia)
+      .map(([dia, v]) => ({ dia, ...v, recebido: v.faturado - v.desconto - v.bonus }))
+      .sort((a, b) => a.dia.localeCompare(b.dia));
 
     // Recebido por forma de pagamento, somando saídas (avulso+convênio+
     // serviço, via movimento_pagamentos), mensalidades e vendas de produto
@@ -393,6 +467,7 @@ export default function BI({ perfil }) {
       tempoMedio: saidasComTempo ? minutosParaHHMM(Math.round(minutosTotal / saidasComTempo)) : 0,
       mensalidades, mensalidadesTotal,
       produtosVendidos, produtosTotal,
+      porOperador, resumoDiario,
     });
 
     const detalheNormal = movs.map((m) => ({
@@ -476,6 +551,55 @@ export default function BI({ perfil }) {
             Faturado = Avulso + Serviços + Convênio + Antecipados + Bônus fidelidade +
             Mensalidades + Venda de produtos — o valor cheio, antes de qualquer desconto/abatimento.
           </p>
+
+          {dados.resumoDiario.length > 1 && (
+            <div className="card">
+              <h2>Resumo por dia ({dados.resumoDiario.length})</h2>
+              <p className="suave">
+                Recebido = Faturado − Descontos (convênio) − Bônus fidelidade — o que realmente
+                entrou em dinheiro/forma de pagamento naquele dia (convênio é cobrado dele depois).
+              </p>
+              <div className="tabela-scroll">
+                <table>
+                  <thead><tr><th>Data</th><th style={{ textAlign: 'right' }}>Faturado</th><th style={{ textAlign: 'right' }}>Desconto</th><th style={{ textAlign: 'right' }}>Bônus</th><th style={{ textAlign: 'right' }}>Recebido</th></tr></thead>
+                  <tbody>
+                    {dados.resumoDiario.map((d) => (
+                      <tr key={d.dia}>
+                        <td className="mono">{fmtDataBR(d.dia)}</td>
+                        <td style={{ textAlign: 'right' }}>{fmtBRL(d.faturado)}</td>
+                        <td style={{ textAlign: 'right' }}>{fmtBRL(d.desconto)}</td>
+                        <td style={{ textAlign: 'right' }}>{fmtBRL(d.bonus)}</td>
+                        <td style={{ textAlign: 'right' }}>{fmtBRL(d.recebido)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot><tr>
+                    <td><strong>Total</strong></td>
+                    <td style={{ textAlign: 'right' }}><strong>{fmtBRL(dados.resumoDiario.reduce((s, d) => s + d.faturado, 0))}</strong></td>
+                    <td style={{ textAlign: 'right' }}><strong>{fmtBRL(dados.resumoDiario.reduce((s, d) => s + d.desconto, 0))}</strong></td>
+                    <td style={{ textAlign: 'right' }}><strong>{fmtBRL(dados.resumoDiario.reduce((s, d) => s + d.bonus, 0))}</strong></td>
+                    <td style={{ textAlign: 'right' }}><strong>{fmtBRL(dados.resumoDiario.reduce((s, d) => s + d.recebido, 0))}</strong></td>
+                  </tr></tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <div className="card">
+            <h2>Por operador ({Object.keys(dados.porOperador).length})</h2>
+            <p className="suave">Saídas + mensalidades recebidas + vendas de produto, por quem processou cada uma.</p>
+            <table>
+              <thead><tr><th>Operador</th><th style={{ textAlign: 'right' }}>Qtde</th><th style={{ textAlign: 'right' }}>Faturado</th></tr></thead>
+              <tbody>
+                {Object.entries(dados.porOperador)
+                  .sort(([, a], [, b]) => b.faturado - a.faturado)
+                  .map(([nome, v]) => (
+                    <tr key={nome}><td>{nome}</td><td style={{ textAlign: 'right' }}>{v.qtd}</td><td style={{ textAlign: 'right' }}>{fmtBRL(v.faturado)}</td></tr>
+                  ))}
+                {Object.keys(dados.porOperador).length === 0 && <tr><td colSpan={3} className="suave">Sem movimentação no período.</td></tr>}
+              </tbody>
+            </table>
+          </div>
 
           <div className="card">
             <h2>Por tipo</h2>
