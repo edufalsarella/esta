@@ -24,7 +24,7 @@ export function dadosFilial(filial = {}) {
     // dataUrl pro HTML/prévia, escposBytes (já decodificado do base64
     // salvo) pro Bluetooth — os dois processados uma vez só no upload
     // (ver logoTicket.js), nunca aqui.
-    LOGO: logo ? { dataUrl: logo.dataUrl, escposBytes: base64ParaBytes(logo.escposB64) } : undefined,
+    LOGO: logo ? { dataUrl: logo.dataUrl, escposBytes: base64ParaBytes(logo.escposB64), percentual: logo.percentual } : undefined,
     ER: filial.nome_fantasia || filial.razao_social || '',
     EF: '',
     EE: [filial.endereco, filial.numero].filter(Boolean).join(', '),

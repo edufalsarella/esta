@@ -101,7 +101,7 @@ export function renderizarModelo(conteudo, dados = {}) {
         // qualquer outro token desconhecido/sem valor.
         empurrar();
         const logo = dados?.LOGO;
-        if (logo) trechos.push({ texto: '', estilos: [], imagemHtml: logo.dataUrl, imagemEscPos: logo.escposBytes });
+        if (logo) trechos.push({ texto: '', estilos: [], imagemHtml: logo.dataUrl, imagemEscPos: logo.escposBytes, imagemPct: logo.percentual ?? 50 });
       } else if (modo) {
         empurrar();
         const estilo = ESTILOS[modo[1]];

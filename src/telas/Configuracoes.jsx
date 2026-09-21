@@ -4,7 +4,7 @@ import { obterTema, aplicarTema } from '../lib/tema.js';
 import { imprimePedidosDaCabine, definirImprimePedidosDaCabine } from '../lib/preferenciasNavegador.js';
 import { conectarImpressoraBluetooth, impressoraBluetoothSalva, esquecerImpressoraBluetooth } from '../lib/bluetoothPrinter.js';
 import { ehFornecedor, ehSupervisor, nfseAtivo } from '../lib/acesso.js';
-import { converterLogo } from '../lib/logoTicket.js';
+import { converterLogo, refazerLogoComPercentual, LARGURA_PAPEL_DOTS, PERCENTUAL_PADRAO } from '../lib/logoTicket.js';
 import CidadeBusca from '../componentes/CidadeBusca.jsx';
 
 // Dados do estacionamento (nome/endereço/CNPJ/fiscal). Só o fornecedor altera:
@@ -80,6 +80,21 @@ export default function Configuracoes({ perfil }) {
     setErroLogo(''); setProcessandoLogo(true);
     try {
       const logo = await converterLogo(arquivo);
+      setFilial((f) => ({ ...f, config: { ...f.config, logo } }));
+    } catch (err) {
+      setErroLogo(err.message);
+    } finally {
+      setProcessandoLogo(false);
+    }
+  }
+
+  // Só muda o tamanho — refaz o bitmap a partir da imagem já salva, sem
+  // precisar escolher o arquivo de novo. Ao soltar o controle (não a cada
+  // pixel do arrasto) pra não regenerar bitmap toda hora.
+  async function mudarTamanhoLogo(percentual) {
+    setErroLogo(''); setProcessandoLogo(true);
+    try {
+      const logo = await refazerLogoComPercentual(filial.config.logo, percentual);
       setFilial((f) => ({ ...f, config: { ...f.config, logo } }));
     } catch (err) {
       setErroLogo(err.message);
@@ -355,6 +370,20 @@ export default function Configuracoes({ perfil }) {
                   {filial.config?.logo && !processandoLogo && (
                     <>
                       <img src={filial.config.logo.dataUrl} alt="Logo atual" style={{ maxWidth: 100, maxHeight: 60, border: '1px solid var(--linha)', borderRadius: 6 }} />
+                      <div className="campo" style={{ maxWidth: 240 }}>
+                        <label>
+                          Tamanho: {filial.config.logo.percentual ?? PERCENTUAL_PADRAO}%
+                          {' '}(≈ {Math.round(LARGURA_PAPEL_DOTS * (filial.config.logo.percentual ?? PERCENTUAL_PADRAO) / 100 / 8)} mm de largura)
+                        </label>
+                        <input type="range" min="10" max="100" step="5"
+                          key={filial.config.logo.percentual ?? PERCENTUAL_PADRAO}
+                          defaultValue={filial.config.logo.percentual ?? PERCENTUAL_PADRAO}
+                          onPointerUp={(e) => mudarTamanhoLogo(Number(e.target.value))}
+                          onKeyUp={(e) => mudarTamanhoLogo(Number(e.target.value))} />
+                        <span className="suave" style={{ fontSize: 11 }}>
+                          100% = largura toda da bobina de 58mm. Maior demora mais pra sair no Bluetooth.
+                        </span>
+                      </div>
                       <button type="button" className="btn-ghost" onClick={removerLogo}>Remover logo</button>
                     </>
                   )}

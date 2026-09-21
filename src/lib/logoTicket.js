@@ -1,18 +1,18 @@
-// Processa a imagem do logo (Configurações) uma única vez no upload — nunca
-// na hora de imprimir — e deixa pronta nas duas formas que o ticket precisa:
+// Processa a imagem do logo (Configurações) no navegador, fora da hora de
+// imprimir, e deixa pronta nas duas formas que o ticket precisa:
 //   dataUrl    -> pro <img> da impressão em navegador/prévia (cor, qualidade cheia)
 //   escposB64  -> bytes do comando GS v 0 (bitmap 1-bit), já em base64, pra
 //                 impressora térmica Bluetooth (ver src/lib/escpos.js)
 // Fazer a conversão pra ESC/POS aqui (e não em tempo de impressão) evita
-// decodificar imagem de novo bytes esperando o operador na cabine.
+// decodificar imagem de novo enquanto o operador espera na cabine.
 //
-// Tamanho pensado pro tempo de envio Bluetooth: TAMANHO_BLOCO=20 bytes a
-// cada 30ms (ver bluetoothPrinter.js) — um bitmap grande demais deixaria o
-// logo sozinho levando vários segundos pra sair.
-const LARGURA_MAX_ESCPOS = 200;
-const ALTURA_MAX_ESCPOS = 100;
-const LARGURA_MAX_DISPLAY = 320;
-const ALTURA_MAX_DISPLAY = 160;
+// Tamanho: `percentual` (10-100) é a fração da largura útil da bobina de 58mm
+// (LARGURA_PAPEL_DOTS pontos, ~8 pontos/mm nas térmicas de 203dpi). Quanto
+// maior, mais bytes por Bluetooth (TAMANHO_BLOCO=20 a cada 30ms, ver
+// bluetoothPrinter.js) — logo grande demora mais pra sair.
+export const LARGURA_PAPEL_DOTS = 384;
+export const PERCENTUAL_PADRAO = 50;
+const ALTURA_MAX_DOTS = 240;
 
 function lerComoDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -32,9 +32,9 @@ function carregarImagem(dataUrl) {
   });
 }
 
-/** Desenha `img` redimensionada (nunca amplia) num canvas novo, fundo branco (imagem com transparência não vira preto). */
-function desenharEmCanvas(img, larguraMax, alturaMax) {
-  const escala = Math.min(1, larguraMax / img.width, alturaMax / img.height);
+/** Desenha `img` num canvas de `larguraDesejada` (altura proporcional, limitada a ALTURA_MAX_DOTS), fundo branco (transparência não vira preto). */
+function desenharEmCanvas(img, larguraDesejada) {
+  const escala = Math.min(larguraDesejada / img.width, ALTURA_MAX_DOTS / img.height);
   const largura = Math.max(1, Math.round(img.width * escala));
   const altura = Math.max(1, Math.round(img.height * escala));
   const canvas = document.createElement('canvas');
@@ -77,21 +77,26 @@ function bytesParaBase64(bytes) {
   return btoa(binario);
 }
 
-/** `file` (input[type=file]) -> { dataUrl, escposB64, largura, altura } pronto pra salvar em filiais.config.logo. */
-export async function converterLogo(file) {
+function gerarEscPos(img, percentual) {
+  const alvo = Math.round(LARGURA_PAPEL_DOTS * percentual / 100);
+  const canvas = desenharEmCanvas(img, alvo);
+  return { escposB64: bytesParaBase64(canvasParaEscPos(canvas)), largura: canvas.width, altura: canvas.height };
+}
+
+/** `file` (input[type=file]) -> { dataUrl, escposB64, largura, altura, percentual } pronto pra salvar em filiais.config.logo. */
+export async function converterLogo(file, percentual = PERCENTUAL_PADRAO) {
   const dataUrlOriginal = await lerComoDataUrl(file);
   const img = await carregarImagem(dataUrlOriginal);
+  // Guarda a imagem em até 384 de largura (nunca amplia) — é dela que sai o
+  // bitmap toda vez que o percentual muda (ver refazerLogoComPercentual).
+  const canvasFonte = desenharEmCanvas(img, Math.min(img.width, LARGURA_PAPEL_DOTS));
+  return { dataUrl: canvasFonte.toDataURL('image/png'), percentual, ...gerarEscPos(img, percentual) };
+}
 
-  const canvasDisplay = desenharEmCanvas(img, LARGURA_MAX_DISPLAY, ALTURA_MAX_DISPLAY);
-  const canvasEscPos = desenharEmCanvas(img, LARGURA_MAX_ESCPOS, ALTURA_MAX_ESCPOS);
-  const comandoEscPos = canvasParaEscPos(canvasEscPos);
-
-  return {
-    dataUrl: canvasDisplay.toDataURL('image/png'),
-    escposB64: bytesParaBase64(comandoEscPos),
-    largura: canvasEscPos.width,
-    altura: canvasEscPos.height,
-  };
+/** Muda só o tamanho: refaz o bitmap a partir do `dataUrl` já salvo, sem precisar reenviar o arquivo. */
+export async function refazerLogoComPercentual(logo, percentual) {
+  const img = await carregarImagem(logo.dataUrl);
+  return { ...logo, percentual, ...gerarEscPos(img, percentual) };
 }
 
 /** `escposB64` salvo -> bytes prontos pra concatenar no fluxo ESC/POS (ver src/lib/escpos.js). */
