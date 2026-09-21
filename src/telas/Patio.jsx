@@ -1021,17 +1021,6 @@ export default function Patio({ perfil }) {
       abrirValorObrigatorioSePreciso(resultado);
       const bonus = await avaliarBonus(resultado, mov.placa);
       if (bonus) { setSaindo((s) => (s ? { ...s, bonusDisponivel: bonus } : s)); setModalBonus(bonus); return; }
-      // "Emitir RPS/DPS em toda saída" (Configurações → Fiscal) — em vez de
-      // esperar o operador lembrar de abrir "Mais opções → Gerar DPS", já
-      // abre sozinho quando tem valor certo pra cobrar (pedeValor ainda
-      // pendente fica pro fluxo manual depois, ver abrirModalDps ali
-      // embaixo). Documento em branco continua permitido nessa tela (emite
-      // sem identificação) — quem não quiser DPS nesta saída específica só
-      // cancela o modal, sem perder o valor calculado.
-      if (nfseAtivo(filial) && filial?.config?.nfse?.emitirTodaSaida && resultado.valor > 0 && !resultado.pedeValor) {
-        await abrirModalDps(mov);
-        return;
-      }
       // Sem convênio, sem valor obrigatório pra confirmar e pagando em
       // dinheiro (o padrão de prepararSaida) — placa/nº de ticket digitado e
       // Enter já finaliza, sem precisar de mouse. Convênio, bônus disponível
@@ -1043,6 +1032,23 @@ export default function Patio({ perfil }) {
         requestAnimationFrame(() => btnConfirmarSaidaRef.current?.focus());
       }
     } catch (e) { setErro(e.message); }
+  }
+
+  /**
+   * Botão "Confirmar saída" do card. Com "Emitir RPS/DPS em toda saída"
+   * (Configurações → Fiscal), o pedido do CPF/CNPJ do tomador vem AQUI — depois
+   * do operador definir convênio, forma de pagamento e bônus no card, já que o
+   * valor final (e se ainda tem algo a cobrar) só é conhecido nesse ponto.
+   * Documento em branco continua permitido no modal (emite sem identificação);
+   * cancelar o modal volta pro card sem perder nada. Valor obrigatório
+   * pendente (pedeValor) segue o fluxo manual ("Mais opções → Gerar DPS").
+   */
+  async function pedirConfirmacaoSaida() {
+    if (nfseAtivo(filial) && filial?.config?.nfse?.emitirTodaSaida && saindo?.resultado?.valor > 0 && !saindo.resultado.pedeValor) {
+      await abrirModalDps(saindo.mov);
+      return;
+    }
+    await confirmarSaida();
   }
 
   /** Cancelar a saída (botão ou clique fora do card) — sem isso o foco ficava
@@ -2304,7 +2310,7 @@ export default function Patio({ perfil }) {
             )}
             <div className="linha-form" style={{ justifyContent: 'flex-end' }}>
               <button className="btn-ghost" onClick={cancelarSaida}>Cancelar</button>
-              <button className="btn-primary" ref={btnConfirmarSaidaRef} disabled={saindo.resultado.pedeValor} onClick={() => confirmarSaida()}>Confirmar saída</button>
+              <button className="btn-primary" ref={btnConfirmarSaidaRef} disabled={saindo.resultado.pedeValor} onClick={pedirConfirmacaoSaida}>Confirmar saída</button>
             </div>
           </div>
         </div>
