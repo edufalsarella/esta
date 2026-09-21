@@ -54,7 +54,12 @@ export async function carregarPatio() {
     .is('dt_saida', null)
     .is('excluido_em', null)
     .order('dt_entrada', { ascending: false })
-    .order('hr_entrada', { ascending: false });
+    .order('hr_entrada', { ascending: false })
+    // Empate de data+hora (dois carros na mesma hora comercial, ex.: entrada
+    // em lote) sem 3ª chave de ordenação ficava em ordem indefinida do
+    // Postgres — o controle (sequencial por entrada) desempata mantendo o
+    // mesmo sentido "mais recente primeiro" dos outros dois campos.
+    .order('controle', { ascending: false });
   if (error) throw error;
   return data;
 }
