@@ -11,6 +11,7 @@ import { ehSupervisor } from '../lib/acesso.js';
 /** Colinha por tipo: só os tokens que fazem sentido naquele comprovante. */
 const TOKENS = {
   comuns: [
+    ['@LOGO@', 'Logo do estabelecimento (Configurações → Dados do estacionamento) — vazio se nenhum logo foi importado'],
     ['@ER@', 'Nome do estacionamento'], ['@EF@', '(sem uso — sempre em branco)'], ['@EE@', 'Endereço'],
     ['@EC@', 'Cidade-UF'], ['@EG@', 'CNPJ'], ['@EI@', 'Telefone (uso legado — igual a @FONE@)'], ['@FONE@', 'Telefone do estacionamento'],
     ['@US@', 'Operador'], ['@ARROBA@', 'Imprime um "@"'],
@@ -73,7 +74,12 @@ function tokensDoTipo(tipo) {
 }
 
 /** Dados de exemplo pra pré-visualização — nada real, só pro operador ver o formato. */
+const LOGO_EXEMPLO_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="50">'
+  + '<rect width="120" height="50" fill="#ddd"/>'
+  + '<text x="60" y="30" font-size="13" text-anchor="middle" fill="#888">LOGO</text></svg>';
+
 const EXEMPLO = {
+  LOGO: { dataUrl: `data:image/svg+xml;utf8,${encodeURIComponent(LOGO_EXEMPLO_SVG)}` },
   ER: 'ESTACIONAMENTO MODELO', EF: '', EE: 'Rua General Osorio, 939',
   EC: 'Campinas-SP', EG: '00.000.000/0001-00', EI: '(19) 3241-4920', FONE: '(19) 3241-4920',
   'C#': 'A1B2C3D4', CC: 'ABC1D23', CV: 'FIESTA', TV: 'P', XBOX: '12',

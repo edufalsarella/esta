@@ -55,6 +55,10 @@ export function modeloParaEscPos(conteudo, dados) {
   for (const trechos of renderizarModelo(conteudo, dados)) {
     if (!trechos.length) { bytes.push(LF); continue; }
     for (const t of trechos) {
+      // Logo (@LOGO@ — ver modeloTicket.js): bitmap já pronto (GS v 0,
+      // convertido no upload em Configurações, ver logoTicket.js), não passa
+      // por codificarTexto nem por comando de estilo nenhum.
+      if (t.imagemEscPos) { bytes.push(...t.imagemEscPos); continue; }
       bytes.push(...comandosDeTransicao(estiloAtual, t.estilos));
       estiloAtual = t.estilos;
       bytes.push(...codificarTexto(t.texto));

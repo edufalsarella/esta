@@ -1,5 +1,6 @@
 import { fmtBRL, fmtDataBR, fmtHora, dataHoraDe } from './tempo.js';
 import { MODELOS_PADRAO } from './modelosPadrao.js';
+import { base64ParaBytes } from './logoTicket.js';
 
 // Monta o mapa token -> valor consumido por `renderizarModelo`. Os nomes dos
 // tokens são os mesmos do sistema legado (SISPROC.PRG), pra dar pra colar um
@@ -17,7 +18,13 @@ import { MODELOS_PADRAO } from './modelosPadrao.js';
  * antigo que ainda tenha o token.
  */
 export function dadosFilial(filial = {}) {
+  const logo = filial.config?.logo;
   return {
+    // @LOGO@ (ver modeloTicket.js/Configurações → dados do estabelecimento):
+    // dataUrl pro HTML/prévia, escposBytes (já decodificado do base64
+    // salvo) pro Bluetooth — os dois processados uma vez só no upload
+    // (ver logoTicket.js), nunca aqui.
+    LOGO: logo ? { dataUrl: logo.dataUrl, escposBytes: base64ParaBytes(logo.escposB64) } : undefined,
     ER: filial.nome_fantasia || filial.razao_social || '',
     EF: '',
     EE: [filial.endereco, filial.numero].filter(Boolean).join(', '),

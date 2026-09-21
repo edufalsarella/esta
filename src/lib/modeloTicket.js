@@ -95,6 +95,13 @@ export function renderizarModelo(conteudo, dados = {}) {
 
       if (token === 'ARROBA') {
         texto += '@';
+      } else if (token === 'LOGO') {
+        // Imagem, não texto — não cabe no acúmulo de `texto` normal. Sem
+        // logo configurado (dados.LOGO vazio), o token só some, igual
+        // qualquer outro token desconhecido/sem valor.
+        empurrar();
+        const logo = dados?.LOGO;
+        if (logo) trechos.push({ texto: '', estilos: [], imagemHtml: logo.dataUrl, imagemEscPos: logo.escposBytes });
       } else if (modo) {
         empurrar();
         const estilo = ESTILOS[modo[1]];

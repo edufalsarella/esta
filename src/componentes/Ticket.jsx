@@ -27,6 +27,7 @@ function modeloParaHtml(modelo, dados) {
     .map((trechos) => {
       if (!trechos.length) return '<div class="linha">&nbsp;</div>';
       const conteudo = trechos.map((t) => {
+        if (t.imagemHtml) return `<img class="t-logo" src="${escapeHtml(t.imagemHtml)}" alt="Logo">`;
         const classes = t.estilos.map((e) => CLASSE_ESTILO[e]).filter(Boolean).join(' ');
         const texto = escapeHtml(t.texto);
         return classes ? `<span class="${classes}">${texto}</span>` : texto;
@@ -70,6 +71,7 @@ const ESTILO_TICKET = `
       .t-negrito { font-weight: 700; }
       .t-italico { font-style: italic; }
       .t-sublinhado { text-decoration: underline; }
+      .t-logo { display: block; max-width: 100%; margin: 0 auto 4px; }
 `;
 
 /**
@@ -355,12 +357,16 @@ export function PreviaModelo({ modelo, dados }) {
       {renderizarModelo(modelo, dados).map((trechos, i) => (
         <div key={i}>
           {trechos.length === 0 ? ' ' : trechos.map((t, j) => (
-            <span key={j} style={{
-              fontSize: t.estilos.includes('grande') ? '1.35em' : t.estilos.includes('pequeno') ? '0.85em' : undefined,
-              fontWeight: (t.estilos.includes('grande') || t.estilos.includes('negrito')) ? 700 : undefined,
-              fontStyle: t.estilos.includes('italico') ? 'italic' : undefined,
-              textDecoration: t.estilos.includes('sublinhado') ? 'underline' : undefined,
-            }}>{t.texto}</span>
+            t.imagemHtml ? (
+              <img key={j} src={t.imagemHtml} alt="Logo" style={{ display: 'block', maxWidth: 140 }} />
+            ) : (
+              <span key={j} style={{
+                fontSize: t.estilos.includes('grande') ? '1.35em' : t.estilos.includes('pequeno') ? '0.85em' : undefined,
+                fontWeight: (t.estilos.includes('grande') || t.estilos.includes('negrito')) ? 700 : undefined,
+                fontStyle: t.estilos.includes('italico') ? 'italic' : undefined,
+                textDecoration: t.estilos.includes('sublinhado') ? 'underline' : undefined,
+              }}>{t.texto}</span>
+            )
           ))}
         </div>
       ))}

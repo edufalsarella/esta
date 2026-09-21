@@ -4,6 +4,7 @@ import { obterTema, aplicarTema } from '../lib/tema.js';
 import { imprimePedidosDaCabine, definirImprimePedidosDaCabine } from '../lib/preferenciasNavegador.js';
 import { conectarImpressoraBluetooth, impressoraBluetoothSalva, esquecerImpressoraBluetooth } from '../lib/bluetoothPrinter.js';
 import { ehFornecedor, ehSupervisor, nfseAtivo } from '../lib/acesso.js';
+import { converterLogo } from '../lib/logoTicket.js';
 import CidadeBusca from '../componentes/CidadeBusca.jsx';
 
 // Dados do estacionamento (nome/endereço/CNPJ/fiscal). Só o fornecedor altera:
@@ -23,6 +24,8 @@ export default function Configuracoes({ perfil }) {
   const [previaLimpeza, setPreviaLimpeza] = useState(null);
   const [limpando, setLimpando] = useState(false);
   const [erroLimpeza, setErroLimpeza] = useState('');
+  const [processandoLogo, setProcessandoLogo] = useState(false);
+  const [erroLogo, setErroLogo] = useState('');
   const [certStatus, setCertStatus] = useState(null);
   const [certArquivo, setCertArquivo] = useState(null); // { nome, base64 }
   const [certSenha, setCertSenha] = useState('');
@@ -62,6 +65,31 @@ export default function Configuracoes({ perfil }) {
     } finally {
       setPareandoBt(false);
     }
+  }
+
+  /**
+   * Logo do estabelecimento (@LOGO@, ver Modelos de ticket) — processado uma
+   * vez aqui (canvas: redimensiona + gera o bitmap ESC/POS, ver
+   * logoTicket.js) e fica só em `filial.config.logo`, junto com o resto da
+   * config fiscal/patio/etc. Salva no mesmo botão "Salvar" de sempre — não
+   * grava sozinho, pra não fugir do padrão de "um Salvar só" desta tela.
+   */
+  async function escolherLogo(e) {
+    const arquivo = e.target.files?.[0];
+    if (!arquivo) return;
+    setErroLogo(''); setProcessandoLogo(true);
+    try {
+      const logo = await converterLogo(arquivo);
+      setFilial((f) => ({ ...f, config: { ...f.config, logo } }));
+    } catch (err) {
+      setErroLogo(err.message);
+    } finally {
+      setProcessandoLogo(false);
+    }
+  }
+
+  function removerLogo() {
+    setFilial((f) => ({ ...f, config: { ...f.config, logo: null } }));
   }
 
   function esquecerBluetooth() {
@@ -312,6 +340,27 @@ export default function Configuracoes({ perfil }) {
                   </span>
                 </div>
               </div>
+              {podeEditar && (
+                <div className="linha-form" style={{ alignItems: 'flex-end', marginBottom: 10 }}>
+                  <div className="campo">
+                    <label>Logo do estabelecimento</label>
+                    <input type="file" accept="image/*" onChange={escolherLogo} disabled={processandoLogo} />
+                    <span className="suave" style={{ fontSize: 11 }}>
+                      Fica disponível como o token <code>@LOGO@</code> em Modelos de ticket — não
+                      entra sozinho em nenhum comprovante, só onde você adicionar o token. Salva
+                      junto com o botão "Salvar" desta tela.
+                    </span>
+                  </div>
+                  {processandoLogo && <span className="suave">Processando…</span>}
+                  {filial.config?.logo && !processandoLogo && (
+                    <>
+                      <img src={filial.config.logo.dataUrl} alt="Logo atual" style={{ maxWidth: 100, maxHeight: 60, border: '1px solid var(--linha)', borderRadius: 6 }} />
+                      <button type="button" className="btn-ghost" onClick={removerLogo}>Remover logo</button>
+                    </>
+                  )}
+                </div>
+              )}
+              {erroLogo && <div className="aviso" style={{ marginBottom: 10 }}>{erroLogo}</div>}
               <div className="linha-form" style={{ marginBottom: 10 }}>
                 <div className="campo" style={{ flex: 2 }}>
                   <label>Endereço</label>

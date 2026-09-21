@@ -127,7 +127,7 @@ export default function Reservas({ perfil }) {
   const celulas = useMemo(() => celulasDoMes(anoMes), [anoMes]);
 
   useEffect(() => {
-    supabase.from('filiais').select('nome_fantasia, endereco, cnpj, numero, bairro, inscricao_mun, inscricao_est, razao_social')
+    supabase.from('filiais').select('nome_fantasia, endereco, cnpj, numero, bairro, inscricao_mun, inscricao_est, razao_social, config')
       .eq('id', perfil.filial_id).maybeSingle().then(({ data }) => setFilial(data));
     carregarModelosTicket().then(setModelosTicket);
     supabase.from('formas_pagamento').select('*').eq('ativo', true).order('codigo').then(({ data }) => setFormas(data || []));
