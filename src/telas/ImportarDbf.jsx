@@ -90,7 +90,7 @@ export default function ImportarDbf({ perfil }) {
     try {
       let res;
       if (ehTabelaPreco) {
-        res = await importarTabelasPreco({ perfil, tabelas: tabelasDetectadas.tabelas });
+        res = await importarTabelasPreco({ perfil, tabelas: tabelasDetectadas.tabelas, substituir });
       } else {
         const convertidas = dbf.registros.map((r) => converterLinha(r, destinoAtual.colunas, mapeamento));
         const linhas = filtrarLinhas(destinoAtual.colunas, convertidas);
@@ -167,13 +167,12 @@ export default function ImportarDbf({ perfil }) {
             reconhecido na entrada do pátio com os veículos extras — não com o principal.
           </p>
         )}
-        {!ehTabelaPreco && (
-          <label className="campo-check" style={{ marginTop: 10 }}>
-            <input type="checkbox" checked={substituir} onChange={(e) => setSubstituir(e.target.checked)} />
-            Substituir os que já existem (em vez de ignorar) — use pra reimportar os dados
-            de um cliente sem cancelar um por um antes
-          </label>
-        )}
+        <label className="campo-check" style={{ marginTop: 10 }}>
+          <input type="checkbox" checked={substituir} onChange={(e) => setSubstituir(e.target.checked)} />
+          {ehTabelaPreco
+            ? 'Substituir as tabelas que já existem (em vez de ignorar) — troca o cabeçalho e todas as faixas pelo que vier do arquivo'
+            : 'Substituir os que já existem (em vez de ignorar) — use pra reimportar os dados de um cliente sem cancelar um por um antes'}
+        </label>
         {ehVeiculosExtra && (
           <p className="suave" style={{ fontSize: 12, marginTop: 10 }}>
             Cada linha vira um veículo de um mensalista que já existe (achado pelo código
@@ -184,8 +183,10 @@ export default function ImportarDbf({ perfil }) {
           <p className="suave" style={{ fontSize: 12, marginTop: 10 }}>
             Uma linha do arquivo vira uma tabela de preço inteira, com as até 45 faixas
             (colunas ATE/HOR/CON) detectadas sozinhas — sem mapeamento manual. Um tipo que já
-            tenha tabela vigente na filial é ignorado (mudar preço em uso é coisa de fazer em
-            Preços, não de reimportação).
+            tenha tabela vigente na filial é ignorado, a não ser que "Substituir" esteja marcado
+            — aí a tabela (e todas as faixas dela) é trocada pela do arquivo. Cuidado: se a
+            filial já está em operação, mudar um preço em uso é decisão pra tomar em Preços, não
+            pra acontecer sozinho numa reimportação.
           </p>
         )}
         {erro && <div className="aviso" style={{ marginTop: 10 }}>{erro}</div>}

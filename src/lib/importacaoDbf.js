@@ -237,43 +237,58 @@ export async function importarVeiculosExtras({ perfil, linhas, colunas, substitu
  * vira um insert" do resto da tela: cada `tabela` detectada
  * (packages/dbf/tabelaPreco.ts) vira 1 linha em `tabelas_preco` + N linhas em
  * `tabela_preco_faixas` (a grade ATE/HOR/CON, "achatada" em várias colunas no
- * .dbf). Um `tipo` que já tem tabela VIGENTE (vigencia_fim null) na filial é
- * ignorado — igual ao resto da importação, nunca sobrescreve o que já existe
- * (mudar o preço de uma tabela em uso é decisão de quem mexe em Preços, não
- * algo pra acontecer sozinho numa reimportação).
+ * .dbf). Por padrão, um `tipo` que já tem tabela VIGENTE (vigencia_fim null)
+ * na filial é ignorado — igual ao resto da importação. Passando
+ * `substituir: true`, a tabela existente é atualizada no lugar (mesmo `id` —
+ * tabela_preco_faixas referencia esse id, então nunca apaga+recria a linha
+ * pai) e as faixas antigas são trocadas pelas novas do arquivo.
  */
-export async function importarTabelasPreco({ perfil, tabelas }) {
-  const resultado = { criados: 0, ignorados: 0, erros: [] };
+export async function importarTabelasPreco({ perfil, tabelas, substituir = false }) {
+  const resultado = { criados: 0, atualizados: 0, ignorados: 0, erros: [] };
   if (!tabelas.length) return resultado;
 
   const { data: existentes, error: errExistentes } = await supabase
-    .from('tabelas_preco').select('tipo').eq('filial_id', perfil.filial_id).is('vigencia_fim', null);
+    .from('tabelas_preco').select('id, tipo').eq('filial_id', perfil.filial_id).is('vigencia_fim', null);
   if (errExistentes) { resultado.erros.push({ linha: 0, motivo: `Erro ao consultar tabelas existentes: ${errExistentes.message}` }); return resultado; }
-  const tiposExistentes = new Set((existentes || []).map((r) => r.tipo));
+  const idsPorTipo = new Map((existentes || []).map((r) => [r.tipo, r.id]));
 
   for (const tabela of tabelas) {
     if (!tabela.tipo) { resultado.erros.push({ linha: 0, motivo: 'Linha sem código de tabela (TIPO) — ignorada.' }); continue; }
-    if (tiposExistentes.has(tabela.tipo)) { resultado.ignorados++; continue; }
-    tiposExistentes.add(tabela.tipo); // protege contra o mesmo tipo duplicado dentro do próprio arquivo
 
-    const { data: nova, error: errTabela } = await supabase.from('tabelas_preco').insert({
+    const idExistente = idsPorTipo.get(tabela.tipo);
+    if (idExistente && !substituir) { resultado.ignorados++; continue; }
+
+    const payloadHeader = {
       filial_id: perfil.filial_id, tipo: tabela.tipo, descricao: tabela.descricao || tabela.tipo,
       valor_antes: tabela.valorAntes || 0, valor_servico: tabela.valorServico || 0, qte_pontos: tabela.qtePontos || 0,
-    }).select('id').single();
-    if (errTabela) { resultado.erros.push({ linha: tabela.tipo, motivo: errTabela.message }); continue; }
+    };
+
+    let tabelaId;
+    if (idExistente) {
+      const { error: errTabela } = await supabase.from('tabelas_preco').update(payloadHeader).eq('id', idExistente);
+      if (errTabela) { resultado.erros.push({ linha: tabela.tipo, motivo: errTabela.message }); continue; }
+      tabelaId = idExistente;
+      const { error: errApagar } = await supabase.from('tabela_preco_faixas').delete().eq('tabela_preco_id', tabelaId);
+      if (errApagar) { resultado.erros.push({ linha: tabela.tipo, motivo: `Cabeçalho atualizado, mas não consegui apagar as faixas antigas: ${errApagar.message}` }); continue; }
+    } else {
+      const { data: nova, error: errTabela } = await supabase.from('tabelas_preco').insert(payloadHeader).select('id').single();
+      if (errTabela) { resultado.erros.push({ linha: tabela.tipo, motivo: errTabela.message }); continue; }
+      tabelaId = nova.id;
+      idsPorTipo.set(tabela.tipo, tabelaId); // protege contra o mesmo tipo duplicado dentro do próprio arquivo
+    }
 
     if (tabela.faixas.length) {
       const payloadFaixas = tabela.faixas.map((f) => ({
-        filial_id: perfil.filial_id, tabela_preco_id: nova.id, ordem: f.ordem,
+        filial_id: perfil.filial_id, tabela_preco_id: tabelaId, ordem: f.ordem,
         ate: f.ate, valor_hora: f.valorHora, valor_convenio: f.valorConvenio,
       }));
       const { error: errFaixas } = await supabase.from('tabela_preco_faixas').insert(payloadFaixas);
       if (errFaixas) {
-        resultado.erros.push({ linha: tabela.tipo, motivo: `Tabela criada, mas as faixas falharam: ${errFaixas.message}` });
+        resultado.erros.push({ linha: tabela.tipo, motivo: `Tabela ${idExistente ? 'atualizada' : 'criada'}, mas as faixas falharam: ${errFaixas.message}` });
         continue;
       }
     }
-    resultado.criados++;
+    if (idExistente) resultado.atualizados++; else resultado.criados++;
   }
 
   return resultado;
