@@ -36,7 +36,7 @@ export default function Caixa({ perfil }) {
     const [{ data: movs }, { data: sangrias }, { data: formas }, { data: mensPagtos }, { data: antecipadosEntrada }, { data: antecipadosReserva }, { data: vendasProdutos }] = await Promise.all([
       supabase.from('movimentos').select('id,placa,modelo,valor,valor_convenio,valor_dev,dt_saida,hr_saida').eq('caixa_id', c.id).not('dt_saida', 'is', null),
       supabase.from('sangrias').select('id,valor,motivo,created_at').eq('caixa_id', c.id),
-      supabase.from('formas_pagamento').select('codigo,descricao,eh_dinheiro'),
+      supabase.from('formas_pagamento').select('codigo,descricao,eh_dinheiro,eh_devedor'),
       // Mensalidades recebidas neste turno (Mensalistas → Receber).
       supabase.from('mensalista_pagamentos').select('id,valor_pago,forma_pagamento,created_at,mensalistas(razao)').eq('caixa_id', c.id),
       // Valores antecipados recebidos na ENTRADA neste turno (ver 0039_valor_antecipado.sql)
@@ -51,10 +51,34 @@ export default function Caixa({ perfil }) {
       supabase.from('vendas_produtos').select('id,quantidade,valor_total,forma_pagamento,criado_em,produtos(descricao)').eq('caixa_id', c.id),
     ]);
     const dinheiroCods = new Set((formas || []).filter((f) => f.eh_dinheiro).map((f) => f.codigo));
+    const formasDevedorCods = new Set((formas || []).filter((f) => f.eh_devedor).map((f) => f.codigo));
     const descForma = Object.fromEntries((formas || []).map((f) => [f.codigo, f.descricao]));
-    let dinheiroSaidas = 0, total = 0;
+    let dinheiroSaidas = 0, dividaGeradaTotal = 0, total = 0;
     const ids = (movs || []).map((m) => m.id);
-    total = (movs || []).reduce((s, m) => s + Number(m.valor || 0), 0);
+    // Forma(s) de pagamento de cada saída, pro extrato abaixo — split (mais
+    // de uma forma na mesma saída) junta com " + ".
+    const formasPorMovimento = {};
+    if (ids.length) {
+      // Só pagamento de saída (caixa_id null) — o de antecipado tem o
+      // próprio caixa_id e já é somado à parte (`antecipados` abaixo), senão
+      // contaria o mesmo dinheiro duas vezes se saída e entrada caíssem no
+      // mesmo turno.
+      const { data: pg } = await supabase.from('movimento_pagamentos').select('*').in('movimento_id', ids).is('caixa_id', null);
+      dinheiroSaidas = (pg || []).filter((p) => dinheiroCods.has(p.forma_pagamento)).reduce((s, p) => s + Number(p.valor || 0), 0);
+      // Parte desta saída paga com forma "Devedor" (ver Cadastros → Formas de
+      // pagamento, eh_devedor) — não entrou em caixa nenhuma, vira saldo
+      // devedor da placa (ver atualizarSaldoDevedor em Patio.jsx). Só sai do
+      // "Total do turno" o que foi mesmo cobrado/recebido de alguma forma.
+      dividaGeradaTotal = (pg || []).filter((p) => formasDevedorCods.has(p.forma_pagamento)).reduce((s, p) => s + Number(p.valor || 0), 0);
+      for (const p of pg || []) {
+        (formasPorMovimento[p.movimento_id] ||= []).push(descForma[p.forma_pagamento] || p.forma_pagamento);
+      }
+    }
+    // Total gerado pelas saídas (valor cheio da tarifa, independente de forma)
+    // menos a parte que virou "Devedor" nesta mesma saída — essa parte não
+    // entrou em caixa nenhuma, só o resto (dinheiro, pix, cartão, e a dívida
+    // ANTERIOR quitada agora, que já vem embutida em m.valor — ver mais abaixo).
+    total = (movs || []).reduce((s, m) => s + Number(m.valor || 0), 0) - dividaGeradaTotal;
     // Valor que o convênio vai pagar depois (não é dinheiro deste turno) —
     // "Faturado" soma de volta, senão a estadia coberta por convênio some da
     // conta como se não tivesse gerado receita nenhuma (mesmo raciocínio já
@@ -67,22 +91,17 @@ export default function Caixa({ perfil }) {
     // receita nova (ver conversa de 2026-09-22: devendo R$5, entrada de novo,
     // saída cobrando R$10 — R$5 de tarifa nova + R$5 da dívida — sem isso o
     // Faturado do turno somava R$15, não os R$10 que entraram de verdade).
+    // Já ENTRA normalmente no "Total do turno" acima (m.valor inclui essa
+    // quitação, e ela foi de fato recebida agora — só o Faturado não conta
+    // de novo).
     const dividaAnteriorTotal = (movs || []).reduce((s, m) => s + Number(m.valor_dev || 0), 0);
-    const faturado = total + convenioTotal - dividaAnteriorTotal;
-    // Forma(s) de pagamento de cada saída, pro extrato abaixo — split (mais
-    // de uma forma na mesma saída) junta com " + ".
-    const formasPorMovimento = {};
-    if (ids.length) {
-      // Só pagamento de saída (caixa_id null) — o de antecipado tem o
-      // próprio caixa_id e já é somado à parte (`antecipados` abaixo), senão
-      // contaria o mesmo dinheiro duas vezes se saída e entrada caíssem no
-      // mesmo turno.
-      const { data: pg } = await supabase.from('movimento_pagamentos').select('*').in('movimento_id', ids).is('caixa_id', null);
-      dinheiroSaidas = (pg || []).filter((p) => dinheiroCods.has(p.forma_pagamento)).reduce((s, p) => s + Number(p.valor || 0), 0);
-      for (const p of pg || []) {
-        (formasPorMovimento[p.movimento_id] ||= []).push(descForma[p.forma_pagamento] || p.forma_pagamento);
-      }
-    }
+    const faturado = total + dividaGeradaTotal + convenioTotal - dividaAnteriorTotal;
+    // "Dívida (turno)": negativo quando este turno GEROU dívida nova (saiu do
+    // Total do turno, mas ainda é dinheiro que vai entrar um dia); positivo
+    // quando este turno QUITOU dívida de um turno anterior (entrou no Total
+    // do turno de agora, mas não é receita nova nenhuma). Soma zero ao longo
+    // do tempo pra cada dívida que nasce e morre — só mostra o saldo do turno.
+    const divida = dividaAnteriorTotal - dividaGeradaTotal;
     const mensalidades = (mensPagtos || []).reduce((s, p) => s + Number(p.valor_pago || 0), 0);
     const dinheiroMensalidades = (mensPagtos || [])
       .filter((p) => dinheiroCods.has(p.forma_pagamento))
@@ -142,7 +161,7 @@ export default function Caixa({ perfil }) {
     setMovimentacoes(itens);
 
     setResumo({
-      qtd: (movs || []).length, total, faturado, convenio: convenioTotal, dinheiro, sangrias: totalSangria,
+      qtd: (movs || []).length, total, faturado, convenio: convenioTotal, divida, dinheiro, sangrias: totalSangria,
       qtdMensalidades: (mensPagtos || []).length, mensalidades,
       qtdAntecipados: (antecipadosEntrada || []).length + reservasAntecip.length, antecipados: antecipadosTotal,
       qtdProdutos: (vendasProdutos || []).length, produtos: produtosTotal,
@@ -260,6 +279,9 @@ export default function Caixa({ perfil }) {
             <Kpi rotulo="Saídas no turno" valor={resumo.qtd} />
             <Kpi rotulo="Faturado (saídas)" valor={fmtBRL(resumo.faturado)} moeda />
             <Kpi rotulo="Convênio" valor={fmtBRL(resumo.convenio)} moeda />
+            <Kpi rotulo="Dívida (turno)"
+              valor={(resumo.divida < 0 ? '-' : resumo.divida > 0 ? '+' : '') + fmtBRL(Math.abs(resumo.divida))}
+              moeda destaque={resumo.divida < 0} />
             <Kpi rotulo={`Mensalidades (${resumo.qtdMensalidades})`} valor={fmtBRL(resumo.mensalidades)} moeda />
             <Kpi rotulo={`Antecipados (${resumo.qtdAntecipados})`} valor={fmtBRL(resumo.antecipados)} moeda />
             <Kpi rotulo={`Venda de produtos (${resumo.qtdProdutos})`} valor={fmtBRL(resumo.produtos)} moeda />
@@ -273,7 +295,11 @@ export default function Caixa({ perfil }) {
           "Faturado" já soma o valor do Convênio de volta (é receita da estadia, só que cobrada do
           convênio depois, não na hora) — "Em dinheiro" e "Esperado no caixa" continuam só o que
           entrou de fato neste turno (não incluem o Convênio, que ainda não foi recebido), mas já
-          incluem as mensalidades, os valores antecipados e as vendas de produtos.
+          incluem as mensalidades, os valores antecipados e as vendas de produtos. "Dívida (turno)"
+          mostra o saldo de saídas na forma "Devedor" deste turno: negativo quando gerou dívida nova
+          (ela conta em "Faturado", mas sai do "Total do turno" — ainda não entrou), positivo quando
+          quitou dívida de um turno anterior (entra no "Total do turno" agora, mas não em "Faturado"
+          de novo — já tinha contado lá atrás).
         </p>
       </div>
 

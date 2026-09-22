@@ -26,7 +26,7 @@ export async function carregarRelatorioCaixa(caixa) {
   ] = await Promise.all([
     supabase.from('movimentos').select('*').eq('caixa_id', caixa.id).not('dt_saida', 'is', null),
     supabase.from('sangrias').select('*').eq('caixa_id', caixa.id).order('created_at'),
-    supabase.from('formas_pagamento').select('codigo,descricao,eh_dinheiro'),
+    supabase.from('formas_pagamento').select('codigo,descricao,eh_dinheiro,eh_devedor'),
     supabase.from('mensalista_pagamentos').select('*, mensalistas(razao)').eq('caixa_id', caixa.id).order('dt_pagamento'),
     supabase.from('movimento_pagamentos').select('*, movimentos(placa)').eq('caixa_id', caixa.id),
     supabase.from('reservas').select('id, valor_antecipado, forma_antecipado, placa, nome, created_at').eq('caixa_id_antecipado', caixa.id),
@@ -66,12 +66,13 @@ export async function carregarRelatorioCaixa(caixa) {
     .gte('excluido_em', inicio).lte('excluido_em', fim);
 
   const dinheiroCods = new Set((formas || []).filter((f) => f.eh_dinheiro).map((f) => f.codigo));
+  const formasDevedorCods = new Set((formas || []).filter((f) => f.eh_devedor).map((f) => f.codigo));
   const descForma = Object.fromEntries((formas || []).map((f) => [f.codigo, f.descricao]));
   const descConvenio = Object.fromEntries((convenios || []).map((c) => [c.codigo, c.razao]));
   const descTabela = {};
   for (const t of tabelasPreco || []) if (!descTabela[t.tipo]) descTabela[t.tipo] = t.descricao;
 
-  let recebidoSaidas = 0, valorProporcionalTotal = 0, valorConvenioTotal = 0;
+  let recebidoSaidas = 0, valorProporcionalTotal = 0, valorConvenioTotal = 0, dividaAnteriorTotal = 0;
   const porTipo = { avulso: 0, mensalista: 0 };
   const porConvenio = {};
   const porTabela = {};
@@ -82,6 +83,7 @@ export async function carregarRelatorioCaixa(caixa) {
     // estadia conta duas vezes (uma como dívida, outra como parte do valor
     // desta saída), inflando o Faturado do turno.
     const dividaAnterior = Number(m.valor_dev || 0);
+    dividaAnteriorTotal += dividaAnterior;
     recebidoSaidas += Number(m.valor || 0) - dividaAnterior;
     valorProporcionalTotal += Number(m.valor_proporcional || 0);
     valorConvenioTotal += Number(m.valor_convenio || 0);
@@ -144,7 +146,25 @@ export async function carregarRelatorioCaixa(caixa) {
   const sangriasLista = (sangrias || []).map((s) => ({ id: s.id, valor: Number(s.valor || 0), motivo: s.motivo || '' }));
   const sangriasTotal = sangriasLista.reduce((s, x) => s + x.valor, 0);
 
-  const totalRecebido = recebidoSaidas + mensalidadesTotal + antecipadosTotal + produtosTotal;
+  // Parte das saídas paga com forma "Devedor" (ver Cadastros → Formas de
+  // pagamento, eh_devedor) — não entrou em caixa nenhuma, vira saldo devedor
+  // da placa. Sai do "Total recebido" (senão conta como se tivesse entrado
+  // dinheiro), mas continua em valorFaturado (essa estadia gerou receita
+  // igual, só ainda não foi paga — ver comentário de dividaAnteriorTotal
+  // acima pro caso inverso, quando essa dívida é quitada depois).
+  const dividaGeradaTotal = (pagtosSaida || []).filter((p) => formasDevedorCods.has(p.forma_pagamento))
+    .reduce((s, p) => s + Number(p.valor || 0), 0);
+  // "Dívida (turno)": negativo quando este turno gerou dívida nova (saiu do
+  // Total recebido, mas ainda é dinheiro que vai entrar um dia); positivo
+  // quando este turno quitou dívida de um turno anterior (entrou no Total
+  // recebido de agora, mas não é receita nova nenhuma).
+  const divida = dividaAnteriorTotal - dividaGeradaTotal;
+
+  // recebidoSaidas já tirou a dívida ANTERIOR quitada (não é receita nova,
+  // ver acima) — pra caixa/dinheiro ela tem que voltar (é dinheiro de
+  // verdade entrando agora), então some `divida` (= quitada - gerada) de
+  // volta em vez de só subtrair dividaGeradaTotal de novo.
+  const totalRecebido = recebidoSaidas + divida + mensalidadesTotal + antecipadosTotal + produtosTotal;
   const esperadoCaixa = Number(caixa.valor_abertura || 0) + dinheiro - sangriasTotal;
   const diferenca = caixa.valor_fechamento != null ? Number(caixa.valor_fechamento) - esperadoCaixa : null;
 
@@ -189,7 +209,7 @@ export async function carregarRelatorioCaixa(caixa) {
   return {
     caixa, operador: operadorRow?.nome || '—',
     porTipo, porConvenio, porTabela, descConvenio, descTabela, descForma,
-    valorFaturado, valorProporcionalTotal, descontos,
+    valorFaturado, valorProporcionalTotal, descontos, divida,
     mensalidades, mensalidadesTotal, produtos, produtosTotal, antecipados, antecipadosTotal,
     porForma, dinheiro, sangrias: sangriasLista, sangriasTotal,
     totalRecebido, esperadoCaixa, diferenca, itens,
@@ -238,6 +258,7 @@ export function textoRelatorioCaixa(dados, filial, reimpressao = false, incluirM
   linhas.push('', 'FATURAMENTO',
     `Valor faturado: ${fmtBRL(dados.valorFaturado)}`,
     `Convênio: ${fmtBRL(dados.descontos)}`,
+    `Dívida (turno): ${dados.divida >= 0 ? '+' : ''}${fmtBRL(dados.divida)}`,
     `Mensalidades: ${fmtBRL(dados.mensalidadesTotal)}`,
     `Antecipados: ${fmtBRL(dados.antecipadosTotal)}`,
     `Venda de produtos: ${fmtBRL(dados.produtosTotal)}`,
@@ -320,6 +341,7 @@ export function imprimirRelatorioCaixa(dados, filial, reimpressao = false, inclu
   const faturamento = secao('Faturamento')
     + linha('Valor faturado', fmtBRL(dados.valorFaturado))
     + linha('Convênio', fmtBRL(dados.descontos))
+    + linha('Dívida (turno)', (dados.divida >= 0 ? '+' : '') + fmtBRL(dados.divida))
     + linha('Mensalidades', fmtBRL(dados.mensalidadesTotal))
     + linha('Antecipados', fmtBRL(dados.antecipadosTotal))
     + linha('Venda de produtos', fmtBRL(dados.produtosTotal))
