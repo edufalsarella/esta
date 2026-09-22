@@ -341,7 +341,13 @@ export default function BI({ perfil }) {
       antecipadoTotal = 0, bonusTotal = 0, minutosTotal = 0, saidasComTempo = 0;
     for (const m of movs) {
       porTipo[m.tipo_mens] = (porTipo[m.tipo_mens] || 0) + 1;
-      recebidoSaidas += Number(m.valor || 0);
+      // Dívida de uma estadia anterior cobrada nesta saída (valor_dev — ver
+      // dividaAnterior em Patio.jsx/tarifacao.ts) já virou Faturado quando foi
+      // GERADA, na saída anterior — sem subtrair aqui, a mesma estadia conta
+      // duas vezes (uma como dívida, outra dentro do valor desta saída),
+      // inflando o Faturado do período (ver conversa de 2026-09-22).
+      const dividaAnterior = Number(m.valor_dev || 0);
+      recebidoSaidas += Number(m.valor || 0) - dividaAnterior;
       tabelaCheia += Number(m.valor_proporcional || 0);
       valorConvenioTotal += Number(m.valor_convenio || 0);
       // Antecipado e bônus fidelidade também abatem do valor cobrado (ver
@@ -354,7 +360,7 @@ export default function BI({ perfil }) {
       bonusTotal += Number(m.bonus_fidelidade || 0);
       // Mesma parcela desta saída na conta do Faturado geral, só que quebrada
       // por quem processou e por dia (ver "Por operador"/"Resumo por dia").
-      const faturadoDaSaida = Number(m.valor || 0) + Number(m.valor_convenio || 0)
+      const faturadoDaSaida = Number(m.valor || 0) - dividaAnterior + Number(m.valor_convenio || 0)
         + Number(m.valor_antecipado || 0) + Number(m.bonus_fidelidade || 0);
       somaOperador(m.usuario_saida, faturadoDaSaida);
       somaDia(m.dt_saida, { faturado: faturadoDaSaida, desconto: Number(m.valor_convenio || 0), bonus: Number(m.bonus_fidelidade || 0) });
@@ -365,12 +371,12 @@ export default function BI({ perfil }) {
       if (movsComServico.has(m.id)) {
         const totalServico = valorServicoDoMovimento(porMovimento[m.id] || []);
         valorServicos += totalServico;
-        valorAvulso += Math.max(0, Number(m.valor || 0) - totalServico);
+        valorAvulso += Math.max(0, Number(m.valor || 0) - dividaAnterior - totalServico);
       }
       // Avulso: o carro que passa pela balança normal (com convênio ou sem —
       // convênio é só um desconto em cima do avulso, não outra categoria).
       // Fora daqui: mensalista/pacote/hóspede (0 nesta fase).
-      else if (!MENSALISTA.has(m.tipo_mens)) valorAvulso += Number(m.valor || 0);
+      else if (!MENSALISTA.has(m.tipo_mens)) valorAvulso += Number(m.valor || 0) - dividaAnterior;
       if (m.hr_saida != null && m.hr_entrada != null) {
         const decorrido = horas({
           dtEntrada: dataDeISO(m.dt_entrada), entrada: Number(m.hr_entrada),

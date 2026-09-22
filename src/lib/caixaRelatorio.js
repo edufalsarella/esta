@@ -76,7 +76,13 @@ export async function carregarRelatorioCaixa(caixa) {
   const porConvenio = {};
   const porTabela = {};
   for (const m of movs || []) {
-    recebidoSaidas += Number(m.valor || 0);
+    // Dívida de uma estadia anterior cobrada nesta saída (valor_dev — ver
+    // dividaAnterior em Patio.jsx/tarifacao.ts) já virou "recebido"/Faturado
+    // quando foi GERADA, na saída anterior — sem subtrair aqui, a mesma
+    // estadia conta duas vezes (uma como dívida, outra como parte do valor
+    // desta saída), inflando o Faturado do turno.
+    const dividaAnterior = Number(m.valor_dev || 0);
+    recebidoSaidas += Number(m.valor || 0) - dividaAnterior;
     valorProporcionalTotal += Number(m.valor_proporcional || 0);
     valorConvenioTotal += Number(m.valor_convenio || 0);
     if (MENSALISTA.has(m.tipo_mens)) porTipo.mensalista++; else porTipo.avulso++;
@@ -91,7 +97,7 @@ export async function carregarRelatorioCaixa(caixa) {
     }
     const et = (porTabela[m.tipo_veic] ||= { qtd: 0, valor: 0 });
     et.qtd++;
-    et.valor += Number(m.valor || 0);
+    et.valor += Number(m.valor || 0) - dividaAnterior;
   }
   const descontos = valorConvenioTotal;
   // "Valor faturado" é o valor CHEIO gerado pelas saídas (o que o cliente

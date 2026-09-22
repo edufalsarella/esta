@@ -34,7 +34,7 @@ export default function Caixa({ perfil }) {
     if (!c) { setResumo(null); setMovimentacoes([]); return; }
 
     const [{ data: movs }, { data: sangrias }, { data: formas }, { data: mensPagtos }, { data: antecipadosEntrada }, { data: antecipadosReserva }, { data: vendasProdutos }] = await Promise.all([
-      supabase.from('movimentos').select('id,placa,modelo,valor,valor_convenio,dt_saida,hr_saida').eq('caixa_id', c.id).not('dt_saida', 'is', null),
+      supabase.from('movimentos').select('id,placa,modelo,valor,valor_convenio,valor_dev,dt_saida,hr_saida').eq('caixa_id', c.id).not('dt_saida', 'is', null),
       supabase.from('sangrias').select('id,valor,motivo,created_at').eq('caixa_id', c.id),
       supabase.from('formas_pagamento').select('codigo,descricao,eh_dinheiro'),
       // Mensalidades recebidas neste turno (Mensalistas → Receber).
@@ -60,7 +60,15 @@ export default function Caixa({ perfil }) {
     // conta como se não tivesse gerado receita nenhuma (mesmo raciocínio já
     // corrigido no relatório de fechamento, ver caixaRelatorio.js).
     const convenioTotal = (movs || []).reduce((s, m) => s + Number(m.valor_convenio || 0), 0);
-    const faturado = total + convenioTotal;
+    // Dívida de uma estadia anterior, cobrada nesta saída (valor_dev, gravado
+    // na entrada — ver Patio.jsx dividaAnterior/calcularResultadoSaida): já
+    // virou "Faturado" quando foi gerada, na saída anterior — sem subtrair
+    // aqui, essa mesma estadia é contada de novo, como se tivesse gerado
+    // receita nova (ver conversa de 2026-09-22: devendo R$5, entrada de novo,
+    // saída cobrando R$10 — R$5 de tarifa nova + R$5 da dívida — sem isso o
+    // Faturado do turno somava R$15, não os R$10 que entraram de verdade).
+    const dividaAnteriorTotal = (movs || []).reduce((s, m) => s + Number(m.valor_dev || 0), 0);
+    const faturado = total + convenioTotal - dividaAnteriorTotal;
     // Forma(s) de pagamento de cada saída, pro extrato abaixo — split (mais
     // de uma forma na mesma saída) junta com " + ".
     const formasPorMovimento = {};
