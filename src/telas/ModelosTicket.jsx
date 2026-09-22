@@ -26,7 +26,8 @@ const TOKENS = {
     ['@SERVICOS@', 'Serviços'], ['@VALORSERVICOS@', 'Valor dos serviços'],
     ['@BONUS@', 'Bônus fidelidade'], ['@SALDOBONUS@', 'Saldo de pontos após usar o bônus (só quando algum foi usado nesta saída)'],
     ['@VD@', 'Saldo devedor'],
-    ['@MENSALISTA@', 'Nome do mensalista'], ['@AVARIAS@', 'Avarias registradas na entrada'],
+    ['@MENSALISTA@', 'Nome do mensalista'],
+    ['@AVARIAS@', 'Avarias registradas na entrada'], ['@AVARIAS_NUM@', 'Testa se tem avaria digitada — use em @SE(AVARIAS_NUM)@'],
     ['@ANTECIPADO@', 'Valor pago antecipado na entrada'],
   ],
   mensalidade: [
@@ -87,7 +88,7 @@ const EXEMPLO = {
   V: 'R$ 15,00', V_NUM: 15, CO: 'CONV01', VC: 'R$ 5,00', VC_NUM: 5,
   SERVICOS: 'LAVAGEM', VALORSERVICOS: 'R$ 30,00', VALORSERVICOS_NUM: 30,
   BONUS: 'R$ 10,00', BONUS_NUM: 10, SALDOBONUS: '37', SALDOBONUS_NUM: 37,
-  VD: '', VD_NUM: 0, AVISO: '', AVARIAS: 'Risco na porta direita',
+  VD: '', VD_NUM: 0, AVISO: '', AVARIAS: 'Risco na porta direita', AVARIAS_NUM: 1,
   ANTECIPADO: 'R$ 200,00', ANTECIPADO_NUM: 200,
   MENSALISTA: 'JOSE DA SILVA', MCPF: '529.982.247-25', MEND: 'Rua das Flores, 100',
   MCEP: '13010-111', MCID: 'Campinas-SP', MTR: '(19) 3241-4920', MCEL: '(19) 99999-9999',

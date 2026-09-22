@@ -37,6 +37,7 @@ export const MODELOS_PADRAO = {
     '@SE(AVISO)@@AVISO@',
     '@SE(VALORSERVICOS_NUM)@Serv.: @SERVICOS@ = @VALORSERVICOS@',
     '@SE(VD_NUM)@DEVENDO: @VD@',
+    '@SE(AVARIAS_NUM)@Avarias: @AVARIAS@',
     '--------------------------------',
     'Nao nos responsabilizamos por de',
     'feitos eletr./mecan. no veiculo.',
