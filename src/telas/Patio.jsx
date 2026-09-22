@@ -56,6 +56,14 @@ export default function Patio({ perfil }) {
   const [erro, setErro] = useState('');
   const [saindo, setSaindo] = useState(null);
   const [parcelasCartao, setParcelasCartao] = useState(1); // só pro InfiniteTap em crédito
+  // Trava contra confirmar a mesma saída duas vezes (duplo clique, ou Enter
+  // repetido enquanto a 1ª chamada ainda está em andamento) — sem isso,
+  // movimento_pagamentos ganhava uma linha a mais por chamada extra (o
+  // "PIX + PIX + PIX + PIX" no extrato do caixa era exatamente isso: 4
+  // chamadas de confirmarSaida, 4 inserts do mesmo pagamento). Ref (não só
+  // state) porque a 2ª chamada pode chegar antes do primeiro re-render.
+  const salvandoSaidaRef = useRef(false);
+  const [salvandoSaida, setSalvandoSaida] = useState(false);
 
   // Busca de modelo de carro (Entrada) + fallback de tabela manual.
   const [modelos, setModelos] = useState([]);
@@ -1271,6 +1279,18 @@ export default function Patio({ perfil }) {
    * sem passar pelo estado `saindo`.
    */
   async function confirmarSaida(tomadorDps, dadosOverride) {
+    if (salvandoSaidaRef.current) return;
+    salvandoSaidaRef.current = true;
+    setSalvandoSaida(true);
+    try {
+      await confirmarSaidaInterna(tomadorDps, dadosOverride);
+    } finally {
+      salvandoSaidaRef.current = false;
+      setSalvandoSaida(false);
+    }
+  }
+
+  async function confirmarSaidaInterna(tomadorDps, dadosOverride) {
     const { mov, resultado, pagamentos, convenioCodigo, valorCalculado, bonusAplicado, bonusDisponivel, servicosSelecionados, horaConvenio } = dadosOverride || saindo;
     // Cobrança real (dinheiro entrando agora) precisa de caixa aberto pra não
     // ficar de fora do fechamento — mensalista/hóspede sem pagamento (todos
@@ -2310,7 +2330,9 @@ export default function Patio({ perfil }) {
             )}
             <div className="linha-form" style={{ justifyContent: 'flex-end' }}>
               <button className="btn-ghost" onClick={cancelarSaida}>Cancelar</button>
-              <button className="btn-primary" ref={btnConfirmarSaidaRef} disabled={saindo.resultado.pedeValor} onClick={pedirConfirmacaoSaida}>Confirmar saída</button>
+              <button className="btn-primary" ref={btnConfirmarSaidaRef} disabled={saindo.resultado.pedeValor || salvandoSaida} onClick={pedirConfirmacaoSaida}>
+                {salvandoSaida ? 'Confirmando…' : 'Confirmar saída'}
+              </button>
             </div>
           </div>
         </div>
@@ -2413,9 +2435,9 @@ export default function Patio({ perfil }) {
               <button className="btn-ghost" onClick={() => setModalDps(null)}>Cancelar</button>
               {/* Documento em branco é permitido (vira tomador não
                   identificado); errado, não — a prefeitura rejeitaria. */}
-              <button className="btn-primary" ref={btnConfirmarDpsRef} disabled={!!erroCpfCnpj(modalDps.documento)}
+              <button className="btn-primary" ref={btnConfirmarDpsRef} disabled={!!erroCpfCnpj(modalDps.documento) || salvandoSaida}
                 onClick={() => confirmarSaida({ cpf_cnpj: modalDps.documento, nome: modalDps.nome, issRetido: modalDps.issRetido || null })}>
-                Confirmar saída e gerar DPS
+                {salvandoSaida ? 'Confirmando…' : 'Confirmar saída e gerar DPS'}
               </button>
             </div>
           </div>
