@@ -1385,7 +1385,14 @@ export default function Patio({ perfil }) {
     }
 
     let ticketRps = null;
-    if (tomadorDps) {
+    // Valor zerado (ex.: convênio cobriu tudo, ou a dívida quitada cancelou
+    // certinho a tarifa nova) não gera RPS/DPS — a prefeitura não aceita nota
+    // de R$0,00, e a saída conclui normal, só sem documento fiscal. O botão
+    // manual "Gerar DPS" e o disparo automático (Configurações → Fiscal, ver
+    // pedirConfirmacaoSaida) já ficam escondidos com valor 0 — esta é a
+    // trava de verdade, direto onde a nota é criada, contra qualquer jeito
+    // do valor zerar entre abrir o modal e confirmar.
+    if (tomadorDps && resultado.valor > 0) {
       const { error: errNota, nota } = await criarNotaFiscal(supabase, {
         filialId: perfil.filial_id, movimentoId: mov.id, competencia: dtSaida,
         valor: resultado.valor, tomador: tomadorDps,
