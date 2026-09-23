@@ -12,7 +12,7 @@ export default function Caixa({ perfil }) {
   const [movimentacoes, setMovimentacoes] = useState([]);
   const [erro, setErro] = useState('');
   const [abertura, setAbertura] = useState('0');
-  const [sangria, setSangria] = useState({ valor: '', motivo: '' });
+  const [sangria, setSangria] = useState({ tipo: 'sangria', valor: '', motivo: '' });
   const [contado, setContado] = useState('');
   const [filial, setFilial] = useState(null); // cabeçalho do relatório impresso
   const [caixaFechado, setCaixaFechado] = useState(null); // caixa recém-fechado — oferece "Imprimir relatório"
@@ -33,9 +33,9 @@ export default function Caixa({ perfil }) {
     setCaixa(c);
     if (!c) { setResumo(null); setMovimentacoes([]); return; }
 
-    const [{ data: movs }, { data: sangrias }, { data: formas }, { data: mensPagtos }, { data: antecipadosEntrada }, { data: antecipadosReserva }, { data: vendasProdutos }] = await Promise.all([
+    const [{ data: movs }, { data: sangrias }, { data: formas }, { data: mensPagtos }, { data: antecipadosEntrada }, { data: antecipadosReserva }, { data: vendasProdutos }, { data: dividasPagas }] = await Promise.all([
       supabase.from('movimentos').select('id,placa,modelo,valor,valor_convenio,valor_dev,dt_saida,hr_saida').eq('caixa_id', c.id).not('dt_saida', 'is', null),
-      supabase.from('sangrias').select('id,valor,motivo,created_at').eq('caixa_id', c.id),
+      supabase.from('sangrias').select('id,valor,motivo,tipo,created_at').eq('caixa_id', c.id),
       supabase.from('formas_pagamento').select('codigo,descricao,eh_dinheiro,eh_devedor'),
       // Mensalidades recebidas neste turno (Mensalistas → Receber).
       supabase.from('mensalista_pagamentos').select('id,valor_pago,forma_pagamento,created_at,mensalistas(razao)').eq('caixa_id', c.id),
@@ -49,6 +49,9 @@ export default function Caixa({ perfil }) {
       // Vendas de produto (balcão) neste turno (ver 0042_produtos.sql) — nunca
       // passa por movimentos/notas_fiscais, caixa_id próprio igual antecipado.
       supabase.from('vendas_produtos').select('id,quantidade,valor_total,forma_pagamento,criado_em,produtos(descricao)').eq('caixa_id', c.id),
+      // Quitação avulsa de saldo devedor (ver Pátio → ⋮ → Receber dívida,
+      // 0056_divida_pagamentos.sql) — caixa_id próprio igual antecipado.
+      supabase.from('divida_pagamentos').select('id,placa,valor,forma_pagamento,criado_em').eq('caixa_id', c.id),
     ]);
     const dinheiroCods = new Set((formas || []).filter((f) => f.eh_dinheiro).map((f) => f.codigo));
     const formasDevedorCods = new Set((formas || []).filter((f) => f.eh_devedor).map((f) => f.codigo));
@@ -96,12 +99,18 @@ export default function Caixa({ perfil }) {
     // de novo).
     const dividaAnteriorTotal = (movs || []).reduce((s, m) => s + Number(m.valor_dev || 0), 0);
     const faturado = total + dividaGeradaTotal + convenioTotal - dividaAnteriorTotal;
+    // Quitação avulsa de dívida (⋮ → Receber dívida, sem passar pela saída de
+    // novo) — mesma natureza da quitação embutida em valor_dev: dinheiro de
+    // verdade agora, mas não é receita nova (já foi Faturado lá atrás).
+    const dividaAvulsaTotal = (dividasPagas || []).reduce((s, p) => s + Number(p.valor || 0), 0);
+    total += dividaAvulsaTotal;
     // "Dívida (turno)": negativo quando este turno GEROU dívida nova (saiu do
     // Total do turno, mas ainda é dinheiro que vai entrar um dia); positivo
-    // quando este turno QUITOU dívida de um turno anterior (entrou no Total
-    // do turno de agora, mas não é receita nova nenhuma). Soma zero ao longo
-    // do tempo pra cada dívida que nasce e morre — só mostra o saldo do turno.
-    const divida = dividaAnteriorTotal - dividaGeradaTotal;
+    // quando este turno QUITOU dívida de um turno anterior — embutida numa
+    // saída nova ou avulsa (⋮ → Receber dívida) — entrou no Total do turno de
+    // agora, mas não é receita nova nenhuma. Soma zero ao longo do tempo pra
+    // cada dívida que nasce e morre — só mostra o saldo do turno.
+    const divida = dividaAnteriorTotal + dividaAvulsaTotal - dividaGeradaTotal;
     const mensalidades = (mensPagtos || []).reduce((s, p) => s + Number(p.valor_pago || 0), 0);
     const dinheiroMensalidades = (mensPagtos || [])
       .filter((p) => dinheiroCods.has(p.forma_pagamento))
@@ -121,8 +130,14 @@ export default function Caixa({ perfil }) {
     const dinheiroProdutos = (vendasProdutos || [])
       .filter((v) => dinheiroCods.has(v.forma_pagamento))
       .reduce((s, v) => s + Number(v.valor_total || 0), 0);
-    const dinheiro = dinheiroSaidas + dinheiroMensalidades + dinheiroAntecipados + dinheiroProdutos;
-    const totalSangria = (sangrias || []).reduce((s, x) => s + Number(x.valor || 0), 0);
+    const dinheiroDividas = (dividasPagas || [])
+      .filter((p) => dinheiroCods.has(p.forma_pagamento))
+      .reduce((s, p) => s + Number(p.valor || 0), 0);
+    const dinheiro = dinheiroSaidas + dinheiroMensalidades + dinheiroAntecipados + dinheiroProdutos + dinheiroDividas;
+    // Sangria (retirada) e reforço (entrada) são a mesma tabela, só o `tipo`
+    // muda o sentido — ver 0055_reforco_caixa.sql.
+    const totalSangria = (sangrias || []).filter((x) => x.tipo !== 'reforco').reduce((s, x) => s + Number(x.valor || 0), 0);
+    const totalReforco = (sangrias || []).filter((x) => x.tipo === 'reforco').reduce((s, x) => s + Number(x.valor || 0), 0);
 
     // Extrato do turno, item a item — pra conferir na hora, não só o resumo
     // agregado dos Kpis acima. Mais recente primeiro (mesmo critério da lista
@@ -153,19 +168,24 @@ export default function Caixa({ perfil }) {
         descricao: `${v.produtos?.descricao || '—'} (${Number(v.quantidade)}x)`,
         forma: descForma[v.forma_pagamento] || v.forma_pagamento, valor: Number(v.valor_total || 0),
       })),
+      ...(dividasPagas || []).map((p) => ({
+        id: `div-${p.id}`, quando: new Date(p.criado_em), tipo: 'Dívida',
+        descricao: p.placa, forma: descForma[p.forma_pagamento] || p.forma_pagamento, valor: Number(p.valor || 0),
+      })),
       ...(sangrias || []).map((s) => ({
-        id: `sang-${s.id}`, quando: new Date(s.created_at), tipo: 'Sangria',
-        descricao: s.motivo || '—', forma: null, valor: -Number(s.valor || 0),
+        id: `sang-${s.id}`, quando: new Date(s.created_at), tipo: s.tipo === 'reforco' ? 'Reforço' : 'Sangria',
+        descricao: s.motivo || '—', forma: null, valor: s.tipo === 'reforco' ? Number(s.valor || 0) : -Number(s.valor || 0),
       })),
     ].sort((a, b) => b.quando - a.quando);
     setMovimentacoes(itens);
 
     setResumo({
-      qtd: (movs || []).length, total, faturado, convenio: convenioTotal, divida, dinheiro, sangrias: totalSangria,
+      qtd: (movs || []).length, total, faturado, convenio: convenioTotal, divida, dinheiro,
+      sangrias: totalSangria, reforcos: totalReforco,
       qtdMensalidades: (mensPagtos || []).length, mensalidades,
       qtdAntecipados: (antecipadosEntrada || []).length + reservasAntecip.length, antecipados: antecipadosTotal,
       qtdProdutos: (vendasProdutos || []).length, produtos: produtosTotal,
-      esperadoCaixa: Number(c.valor_abertura) + dinheiro - totalSangria,
+      esperadoCaixa: Number(c.valor_abertura) + dinheiro + totalReforco - totalSangria,
     });
   }, [perfil.id]);
 
@@ -194,9 +214,9 @@ export default function Caixa({ perfil }) {
     e.preventDefault();
     const { error } = await supabase.from('sangrias').insert({
       filial_id: perfil.filial_id, caixa_id: caixa.id, operador_id: perfil.id,
-      valor: Number(sangria.valor), motivo: sangria.motivo,
+      valor: Number(sangria.valor), motivo: sangria.motivo, tipo: sangria.tipo,
     });
-    if (error) setErro(error.message); else { setSangria({ valor: '', motivo: '' }); carregar(); }
+    if (error) setErro(error.message); else { setSangria({ tipo: sangria.tipo, valor: '', motivo: '' }); carregar(); }
   }
   async function fechar() {
     if (!window.confirm('Fechar o caixa deste turno?')) return;
@@ -288,6 +308,7 @@ export default function Caixa({ perfil }) {
             <Kpi rotulo="Total do turno" valor={fmtBRL(resumo.total + resumo.mensalidades + resumo.antecipados + resumo.produtos)} moeda />
             <Kpi rotulo="Em dinheiro" valor={fmtBRL(resumo.dinheiro)} moeda />
             <Kpi rotulo="Sangrias" valor={fmtBRL(resumo.sangrias)} moeda />
+            <Kpi rotulo="Reforços" valor={fmtBRL(resumo.reforcos)} moeda />
             <Kpi rotulo="Esperado no caixa" valor={fmtBRL(resumo.esperadoCaixa)} destaque moeda />
           </div>
         )}
@@ -295,8 +316,9 @@ export default function Caixa({ perfil }) {
           "Faturado" já soma o valor do Convênio de volta (é receita da estadia, só que cobrada do
           convênio depois, não na hora) — "Em dinheiro" e "Esperado no caixa" continuam só o que
           entrou de fato neste turno (não incluem o Convênio, que ainda não foi recebido), mas já
-          incluem as mensalidades, os valores antecipados e as vendas de produtos. "Dívida (turno)"
-          mostra o saldo de saídas na forma "Devedor" deste turno: negativo quando gerou dívida nova
+          incluem as mensalidades, os valores antecipados, as vendas de produtos e a dívida recebida.
+          "Dívida (turno)" mostra o saldo de dívida deste turno — gerada numa saída (forma "Devedor")
+          ou quitada (numa saída nova ou avulsa, ⋮ → Receber dívida): negativo quando gerou dívida nova
           (ela conta em "Faturado", mas sai do "Total do turno" — ainda não entrou), positivo quando
           quitou dívida de um turno anterior (entra no "Total do turno" agora, mas não em "Faturado"
           de novo — já tinha contado lá atrás).
@@ -325,9 +347,18 @@ export default function Caixa({ perfil }) {
         </div>
       </div>
 
-      <div className="card" style={{ maxWidth: 460 }}>
-        <h2>Sangria</h2>
+      <div className="card" style={{ maxWidth: 520 }}>
+        <h2>Sangria / Reforço de caixa</h2>
+        <p className="suave">Sangria tira dinheiro do caixa (troco excedente, depósito). Reforço coloca dinheiro
+          durante o turno (ex.: reforçar o troco) — soma no "Esperado no caixa" em vez de descontar.</p>
         <form className="linha-form" onSubmit={lancarSangria}>
+          <div className="campo" style={{ maxWidth: 160 }}>
+            <label>Tipo</label>
+            <select value={sangria.tipo} onChange={(e) => setSangria({ ...sangria, tipo: e.target.value })}>
+              <option value="sangria">Sangria (retirada)</option>
+              <option value="reforco">Reforço (entrada)</option>
+            </select>
+          </div>
           <div className="campo"><label>Valor</label><input type="number" step="0.01" value={sangria.valor} onChange={(e) => setSangria({ ...sangria, valor: e.target.value })} required /></div>
           <div className="campo"><label>Motivo</label><input value={sangria.motivo} onChange={(e) => setSangria({ ...sangria, motivo: e.target.value })} /></div>
           <button className="btn-primary" type="submit">Registrar</button>

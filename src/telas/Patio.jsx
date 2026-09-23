@@ -11,6 +11,7 @@ import DitarPlaca from '../componentes/DitarPlaca.jsx';
 import CardAcoes from '../componentes/CardAcoes.jsx';
 import ReceberMensalidadeFluxo from '../componentes/ReceberMensalidade.jsx';
 import VendaProdutosFluxo from '../componentes/VendaProdutos.jsx';
+import ReceberDividaFluxo from '../componentes/ReceberDivida.jsx';
 import AbrirCaixaInline from '../componentes/AbrirCaixaInline.jsx';
 import { criarNotaFiscal } from '../lib/notaFiscal.js';
 import { dadosFilial, dadosMovimento, permanenciaDe, montarTicketRps, dadosDivida } from '../lib/dadosTicket.js';
@@ -107,6 +108,7 @@ export default function Patio({ perfil }) {
   const [caixaAberto, setCaixaAberto] = useState(null);
   const [produtos, setProdutos] = useState([]);
   const [abrirVendaProdutos, setAbrirVendaProdutos] = useState(false); // fluxo de "Venda Produtos" (menu ⋮)
+  const [abrirReceberDivida, setAbrirReceberDivida] = useState(false); // fluxo de "Receber dívida" (menu ⋮)
   const [pendenteCaixa, setPendenteCaixa] = useState(null); // { executar } — ação de recebimento esperando caixa aberto
   const placaRef = useRef(null);
   const buscaModeloRef = useRef(null);
@@ -1617,6 +1619,7 @@ export default function Patio({ perfil }) {
           <h2>Entrada de veículo</h2>
           <CardAcoes acoes={[
             { label: 'Receber mensalidade', onClick: () => setAbrirRecebimento(true) },
+            { label: 'Receber dívida', onClick: () => setAbrirReceberDivida(true) },
             { label: 'Cadastrar senha do mês', onClick: abrirModalSenhaMes },
             { label: 'Venda Produtos', onClick: () => setAbrirVendaProdutos(true) },
           ]} />
@@ -2064,6 +2067,12 @@ export default function Patio({ perfil }) {
         <VendaProdutosFluxo perfil={perfil} produtos={produtos} formas={formas} caixaAberto={caixaAberto} onCaixaAberto={setCaixaAberto}
           onConcluido={(t) => { setTicket(t); setAbrirVendaProdutos(false); recarregar(); }}
           onFechar={() => setAbrirVendaProdutos(false)} />
+      )}
+
+      {abrirReceberDivida && (
+        <ReceberDividaFluxo perfil={perfil} formas={formas} caixaAberto={caixaAberto} onCaixaAberto={setCaixaAberto}
+          onConcluido={(t) => { setTicket(t); setAbrirReceberDivida(false); }}
+          onFechar={() => setAbrirReceberDivida(false)} />
       )}
 
       {pendenteCaixa && (

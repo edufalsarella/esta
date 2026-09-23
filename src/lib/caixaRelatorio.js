@@ -22,6 +22,7 @@ export async function carregarRelatorioCaixa(caixa) {
   const [
     { data: movs }, { data: sangrias }, { data: formas }, { data: mensPagtos },
     { data: antecipadosEntrada }, { data: antecipadosReserva }, { data: vendasProdutos },
+    { data: dividasPagas },
     { data: operadorRow }, { data: convenios }, { data: tabelasPreco },
   ] = await Promise.all([
     supabase.from('movimentos').select('*').eq('caixa_id', caixa.id).not('dt_saida', 'is', null),
@@ -31,6 +32,8 @@ export async function carregarRelatorioCaixa(caixa) {
     supabase.from('movimento_pagamentos').select('*, movimentos(placa)').eq('caixa_id', caixa.id),
     supabase.from('reservas').select('id, valor_antecipado, forma_antecipado, placa, nome, created_at').eq('caixa_id_antecipado', caixa.id),
     supabase.from('vendas_produtos').select('*, produtos(codigo,descricao)').eq('caixa_id', caixa.id).order('criado_em'),
+    // Quitação avulsa de saldo devedor (ver Pátio → ⋮ → Receber dívida, 0056_divida_pagamentos.sql).
+    supabase.from('divida_pagamentos').select('*').eq('caixa_id', caixa.id).order('criado_em'),
     supabase.from('perfis').select('nome').eq('id', caixa.operador_id).maybeSingle(),
     supabase.from('convenios').select('codigo, razao'),
     supabase.from('tabelas_preco').select('tipo, descricao').order('vigencia_inicio', { ascending: false }),
@@ -130,21 +133,37 @@ export async function carregarRelatorioCaixa(caixa) {
   ];
   const antecipadosTotal = antecipados.reduce((s, a) => s + a.valor, 0);
 
-  // Recebido por forma de pagamento — soma saída + mensalidade + antecipado + produto.
+  // Quitação avulsa de dívida (⋮ → Receber dívida, sem passar pela saída de
+  // novo — ver 0056_divida_pagamentos.sql) — mesma natureza da quitação
+  // embutida em valor_dev: dinheiro de verdade agora, mas não é receita nova.
+  const dividasPagasLista = (dividasPagas || []).map((p) => ({
+    id: p.id, placa: p.placa, valor: Number(p.valor || 0), forma: p.forma_pagamento,
+  }));
+  const dividaAvulsaTotal = dividasPagasLista.reduce((s, p) => s + p.valor, 0);
+
+  // Recebido por forma de pagamento — soma saída + mensalidade + antecipado + produto + dívida.
   const porForma = {};
   const somaForma = (forma, valor) => { porForma[forma] = (porForma[forma] || 0) + valor; };
   for (const p of pagtosSaida || []) somaForma(p.forma_pagamento, Number(p.valor || 0));
   for (const m of mensalidades) somaForma(m.forma, m.valor);
   for (const a of antecipados) somaForma(a.forma, a.valor);
   for (const p of produtos) somaForma(p.forma, p.valor);
+  for (const p of dividasPagasLista) somaForma(p.forma, p.valor);
 
   const dinheiro = (pagtosSaida || []).filter((p) => dinheiroCods.has(p.forma_pagamento)).reduce((s, p) => s + Number(p.valor || 0), 0)
     + mensalidades.filter((m) => dinheiroCods.has(m.forma)).reduce((s, m) => s + m.valor, 0)
     + antecipados.filter((a) => dinheiroCods.has(a.forma)).reduce((s, a) => s + a.valor, 0)
-    + produtos.filter((p) => dinheiroCods.has(p.forma)).reduce((s, p) => s + p.valor, 0);
+    + produtos.filter((p) => dinheiroCods.has(p.forma)).reduce((s, p) => s + p.valor, 0)
+    + dividasPagasLista.filter((p) => dinheiroCods.has(p.forma)).reduce((s, p) => s + p.valor, 0);
 
-  const sangriasLista = (sangrias || []).map((s) => ({ id: s.id, valor: Number(s.valor || 0), motivo: s.motivo || '' }));
+  // Sangria (retirada) e reforço (entrada) são a mesma tabela, só o `tipo`
+  // muda o sentido — ver 0055_reforco_caixa.sql.
+  const sangriasLista = (sangrias || []).filter((s) => s.tipo !== 'reforco')
+    .map((s) => ({ id: s.id, valor: Number(s.valor || 0), motivo: s.motivo || '' }));
   const sangriasTotal = sangriasLista.reduce((s, x) => s + x.valor, 0);
+  const reforcosLista = (sangrias || []).filter((s) => s.tipo === 'reforco')
+    .map((s) => ({ id: s.id, valor: Number(s.valor || 0), motivo: s.motivo || '' }));
+  const reforcosTotal = reforcosLista.reduce((s, x) => s + x.valor, 0);
 
   // Parte das saídas paga com forma "Devedor" (ver Cadastros → Formas de
   // pagamento, eh_devedor) — não entrou em caixa nenhuma, vira saldo devedor
@@ -156,16 +175,17 @@ export async function carregarRelatorioCaixa(caixa) {
     .reduce((s, p) => s + Number(p.valor || 0), 0);
   // "Dívida (turno)": negativo quando este turno gerou dívida nova (saiu do
   // Total recebido, mas ainda é dinheiro que vai entrar um dia); positivo
-  // quando este turno quitou dívida de um turno anterior (entrou no Total
-  // recebido de agora, mas não é receita nova nenhuma).
-  const divida = dividaAnteriorTotal - dividaGeradaTotal;
+  // quando este turno quitou dívida de um turno anterior — embutida numa
+  // saída nova ou avulsa (⋮ → Receber dívida) — entrou no Total recebido de
+  // agora, mas não é receita nova nenhuma.
+  const divida = dividaAnteriorTotal + dividaAvulsaTotal - dividaGeradaTotal;
 
   // recebidoSaidas já tirou a dívida ANTERIOR quitada (não é receita nova,
   // ver acima) — pra caixa/dinheiro ela tem que voltar (é dinheiro de
-  // verdade entrando agora), então some `divida` (= quitada - gerada) de
-  // volta em vez de só subtrair dividaGeradaTotal de novo.
+  // verdade entrando agora), então some `divida` (= quitada - gerada, já
+  // incluindo a avulsa) de volta em vez de só subtrair dividaGeradaTotal de novo.
   const totalRecebido = recebidoSaidas + divida + mensalidadesTotal + antecipadosTotal + produtosTotal;
-  const esperadoCaixa = Number(caixa.valor_abertura || 0) + dinheiro - sangriasTotal;
+  const esperadoCaixa = Number(caixa.valor_abertura || 0) + dinheiro + reforcosTotal - sangriasTotal;
   const diferenca = caixa.valor_fechamento != null ? Number(caixa.valor_fechamento) - esperadoCaixa : null;
 
   // Extrato item a item (opcional no relatório — ver "Incluir lista de
@@ -200,9 +220,13 @@ export async function carregarRelatorioCaixa(caixa) {
       descricao: `${v.produtos?.descricao || '—'} (${Number(v.quantidade)}x)`,
       forma: descForma[v.forma_pagamento] || v.forma_pagamento, valor: Number(v.valor_total || 0),
     })),
+    ...(dividasPagas || []).map((p) => ({
+      id: `div-${p.id}`, quando: new Date(p.criado_em), tipo: 'Dívida',
+      descricao: p.placa, forma: descForma[p.forma_pagamento] || p.forma_pagamento, valor: Number(p.valor || 0),
+    })),
     ...(sangrias || []).map((s) => ({
-      id: `sang-${s.id}`, quando: new Date(s.created_at), tipo: 'Sangria',
-      descricao: s.motivo || '—', forma: null, valor: -Number(s.valor || 0),
+      id: `sang-${s.id}`, quando: new Date(s.created_at), tipo: s.tipo === 'reforco' ? 'Reforço' : 'Sangria',
+      descricao: s.motivo || '—', forma: null, valor: s.tipo === 'reforco' ? Number(s.valor || 0) : -Number(s.valor || 0),
     })),
   ].sort((a, b) => b.quando - a.quando);
 
@@ -211,7 +235,8 @@ export async function carregarRelatorioCaixa(caixa) {
     porTipo, porConvenio, porTabela, descConvenio, descTabela, descForma,
     valorFaturado, valorProporcionalTotal, descontos, divida,
     mensalidades, mensalidadesTotal, produtos, produtosTotal, antecipados, antecipadosTotal,
-    porForma, dinheiro, sangrias: sangriasLista, sangriasTotal,
+    dividasPagas: dividasPagasLista, dividaAvulsaTotal,
+    porForma, dinheiro, sangrias: sangriasLista, sangriasTotal, reforcos: reforcosLista, reforcosTotal,
     totalRecebido, esperadoCaixa, diferenca, itens,
     qtdSaidas: (movs || []).length, qtdCancelados: qtdCancelados || 0, qtdSemSaida,
   };
@@ -267,6 +292,8 @@ export function textoRelatorioCaixa(dados, filial, reimpressao = false, incluirM
   linhas.push('', 'CAIXA', `Troco de abertura: ${fmtBRL(Number(caixa.valor_abertura || 0))}`,
     `Sangrias: ${fmtBRL(dados.sangriasTotal)}`);
   for (const s of dados.sangrias) linhas.push(`  ${s.motivo || 'Sangria'}: -${fmtBRL(s.valor)}`);
+  linhas.push(`Reforços: ${fmtBRL(dados.reforcosTotal)}`);
+  for (const s of dados.reforcos) linhas.push(`  ${s.motivo || 'Reforço'}: +${fmtBRL(s.valor)}`);
   linhas.push(`Dinheiro recebido: ${fmtBRL(dados.dinheiro)}`, `Esperado no caixa: ${fmtBRL(dados.esperadoCaixa)}`);
   if (caixa.valor_fechamento != null) linhas.push(`Dinheiro contado: ${fmtBRL(Number(caixa.valor_fechamento))}`);
   if (dados.diferenca != null) linhas.push(`Diferença: ${dados.diferenca >= 0 ? '+' : ''}${fmtBRL(dados.diferenca)}`);
@@ -352,6 +379,10 @@ export function imprimirRelatorioCaixa(dados, filial, reimpressao = false, inclu
     + linha('Sangrias', fmtBRL(dados.sangriasTotal))
     + (dados.sangrias.length
       ? dados.sangrias.map((s) => linha(`  ${s.motivo || 'Sangria'}`, `-${fmtBRL(s.valor)}`)).join('')
+      : '')
+    + linha('Reforços', fmtBRL(dados.reforcosTotal))
+    + (dados.reforcos.length
+      ? dados.reforcos.map((s) => linha(`  ${s.motivo || 'Reforço'}`, `+${fmtBRL(s.valor)}`)).join('')
       : '')
     + linha('Dinheiro recebido', fmtBRL(dados.dinheiro))
     + linha('Esperado no caixa', fmtBRL(dados.esperadoCaixa), 'total')
