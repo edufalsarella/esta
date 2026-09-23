@@ -12,7 +12,16 @@
 //   SUPABASE_SERVICE_ROLE_KEY
 import { createClient } from '@supabase/supabase-js';
 
-const MINUTOS_SEM_PING_EXPIRA = 2;
+// 24h, não 2min: a vaga é por POSTO (ver SessoesGate.jsx), e um cliente
+// costuma logar num Windows quase parado (fica minimizado/em segundo plano
+// a maior parte do tempo, o funcionário usa mais o Android) — 2min derrubava
+// esse posto sozinho, e se um terceiro dispositivo (ex.: o celular do dono,
+// espiando o painel) pegava a vaga liberada nesse meio tempo, o funcionário
+// tomava bloqueio no Windows sem nunca ter saído de propósito. Sessão
+// realmente esquecida (PC travou, não deu pra clicar "Sair") só libera a
+// vaga depois de 24h — até lá, quem precisar entrar pede pra alguém sair de
+// um dos dispositivos (ver liberarSessao/"Sair" abaixo).
+const MINUTOS_SEM_PING_EXPIRA = 24 * 60;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ erro: 'Método não suportado.' }); return; }

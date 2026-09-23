@@ -11,8 +11,9 @@ const CHAVE_SESSAO_ID = 'esta_sessao_id';
  *
  * Era sessionStorage (um id por aba/janela) e isso furava o limite ao
  * contrário: cada vez que a cabine era reaberta nascia uma sessão NOVA, e a
- * anterior só sumia depois de 2 min sem heartbeat — reabrir o app duas vezes
- * seguidas estourava um limite de 2 usuários tendo só duas pessoas de
+ * anterior só sumia depois de expirar sem heartbeat (ver
+ * MINUTOS_SEM_PING_EXPIRA em api/sessao-heartbeat.js) — reabrir o app duas
+ * vezes seguidas estourava um limite de 2 usuários tendo só duas pessoas de
  * verdade. Foi o que aconteceu numa instalação, durante os testes de
  * impressão.
  *
@@ -29,9 +30,11 @@ function sessaoId() {
 }
 
 /**
- * Devolve a vaga na hora, em vez de deixar o limite esperar os 2 min de
- * expiração — chamado no "Sair" (ver Layout.jsx). Best-effort: falhando, a
- * expiração por falta de heartbeat resolve sozinha.
+ * Devolve a vaga na hora, em vez de deixar o limite esperar a expiração de
+ * 24h por falta de heartbeat (ver MINUTOS_SEM_PING_EXPIRA em
+ * api/sessao-heartbeat.js) — chamado no "Sair" (ver Layout.jsx). Best-effort:
+ * falhando, a expiração por falta de heartbeat resolve sozinha (só que bem
+ * mais devagar).
  */
 export async function liberarSessao() {
   try {
