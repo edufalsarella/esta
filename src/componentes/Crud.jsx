@@ -1,12 +1,18 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
+import CidadeBusca from './CidadeBusca.jsx';
 
 /**
  * CRUD genérico sobre uma tabela do Supabase (RLS isola por filial).
- * `colunas`: [{ campo, rotulo, tipo?('text'|'number'|'bool'|'hora'|'select'), opcoes?, obrigatorio?, naTabela?, noForm? }]
+ * `colunas`: [{ campo, rotulo, tipo?('text'|'number'|'bool'|'hora'|'select'|'cidade'), opcoes?, obrigatorio?, naTabela?, noForm?, oculto? }]
  * `exclusivos`: grupos de campos que não podem conviver, ex.: [['perc_conv','vlr_conv','tab_horas']].
  *   Preencher um zera os outros do grupo — evita a regra silenciosa de qual
  *   deles vence quando mais de um está preenchido.
+ * `tipo: 'cidade'` (busca por cidade → nome + UF + código IBGE, ver
+ * CidadeBusca.jsx) precisa de mais dois `campo`s no array (o UF e o código
+ * IBGE) pra `salvar` gravar os três — marque os dois com `oculto: true` pra
+ * eles não ganharem sua própria linha no formulário (o widget já preenche os
+ * três juntos). Mesmo padrão já usado à mão em Configuracoes/Fiscal/Mensalistas.
  */
 export default function Crud({ perfil, titulo, subtitulo, tabela, colunas, ordem = 'created_at', ascending = true, aoMudar, exclusivos = [] }) {
   const [linhas, setLinhas] = useState([]);
@@ -100,7 +106,7 @@ function temValor(v) {
 
 function FormModal({ colunas, inicial, exclusivos = [], erro, onSalvar, onFechar, titulo }) {
   const [obj, setObj] = useState(inicial);
-  const campos = colunas.filter((c) => c.noForm !== false);
+  const campos = colunas.filter((c) => c.noForm !== false && !c.oculto);
 
   function set(campo, valor) {
     setObj((o) => {
@@ -131,6 +137,10 @@ function FormModal({ colunas, inicial, exclusivos = [], erro, onSalvar, onFechar
               <label>{c.rotulo}{c.obrigatorio ? ' *' : ''}</label>
               {c.tipo === 'bool' ? (
                 <input type="checkbox" checked={Boolean(obj[c.campo])} onChange={(e) => set(c.campo, e.target.checked)} />
+              ) : c.tipo === 'cidade' ? (
+                <CidadeBusca
+                  valor={obj[c.campo] && obj.uf ? `${obj[c.campo]} - ${obj.uf}` : (obj[c.campo] || obj.cod_ibge || '')}
+                  onSelecionar={(mun) => { set(c.campo, mun.nome); set('uf', mun.uf); set('cod_ibge', mun.codigo); }} />
               ) : c.tipo === 'select' ? (
                 <select value={obj[c.campo] ?? ''} onChange={(e) => set(c.campo, e.target.value)} required={c.obrigatorio}>
                   <option value="">—</option>

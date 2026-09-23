@@ -40,8 +40,6 @@ export function Convenios({ perfil }) {
         ajuda: 'Na saída, o operador informa o horário em que o cliente saiu do convênio (vem carimbado no ticket). O convênio banca até esse horário; do minuto seguinte até a saída vira estadia normal, cobrada do cliente pela "Tabela depois do convênio".' },
       { campo: 'tab_preco', rotulo: 'Tabela depois do convênio', tipo: 'select', opcoes: tabelasOpcoes, naTabela: false,
         ajuda: 'Cobra o tempo que o cliente ficou no pátio DEPOIS de sair do convênio (só vale junto com "Pede hora"). Em branco, cobra pela tabela do próprio veículo. Ex.: o cabeleireiro paga 1h15 e o cliente paga as 2h que passeou pela cidade.' },
-      { campo: 'selos', rotulo: 'Selos', tipo: 'number', naTabela: false },
-      { campo: 'valor_selo', rotulo: 'Vlr selo', tipo: 'number', naTabela: false },
       { campo: 'so_supervisor', rotulo: 'Só supervisor', tipo: 'bool', naTabela: false },
       // Cadastrais (0049): só fazem falta pra quem emite DPS/RPS com o
       // convênio como tomador — por isso ficam fora da tabela, só no form.
@@ -52,11 +50,11 @@ export function Convenios({ perfil }) {
       { campo: 'endereco', rotulo: 'Endereço', naTabela: false },
       { campo: 'numero', rotulo: 'Número', naTabela: false },
       { campo: 'bairro', rotulo: 'Bairro', naTabela: false },
-      { campo: 'cidade', rotulo: 'Cidade', naTabela: false },
-      { campo: 'uf', rotulo: 'UF', naTabela: false },
+      { campo: 'cidade', rotulo: 'Cidade (código IBGE)', tipo: 'cidade', naTabela: false,
+        ajuda: 'Exigido no DPS/RPS quando a nota sai no nome do convênio — mesma busca usada no cadastro do mensalista, já traz o código certo.' },
+      { campo: 'uf', naTabela: false, oculto: true },
+      { campo: 'cod_ibge', naTabela: false, oculto: true },
       { campo: 'cep', rotulo: 'CEP', naTabela: false },
-      { campo: 'cod_ibge', rotulo: 'Cód. IBGE da cidade', naTabela: false,
-        ajuda: 'Exigido no DPS/RPS quando a nota sai no nome do convênio. 7 dígitos — o mesmo código usado no cadastro do mensalista.' },
       { campo: 'telefone', rotulo: 'Telefone', naTabela: false },
       { campo: 'email', rotulo: 'E-mail', naTabela: false },
     ]} />;
