@@ -8,6 +8,18 @@ function escapeHtml(s) {
 }
 
 /**
+ * Texto do valor de UM item do extrato (dados.itens), com a dívida junto
+ * quando houver — mesmas duas colunas do extrato ao vivo (Caixa.jsx), só que
+ * em texto corrido aqui (WhatsApp/e-mail/impressão não têm coluna).
+ * `it.valor` nulo (quitação avulsa de dívida, 100% dívida) não mostra "R$ 0,00".
+ */
+function valorComDivida(it) {
+  const valorTxt = it.valor == null ? '—' : fmtBRL(it.valor);
+  if (!it.divida || Math.abs(it.divida) < 0.005) return valorTxt;
+  return `${valorTxt} (dívida: ${it.divida > 0 ? '+' : ''}${fmtBRL(it.divida)})`;
+}
+
+/**
  * Carrega todos os dados de UM caixa (turno) — usado tanto pro relatório na
  * hora do fechamento quanto pra reimprimir um caixa já fechado há tempo (ver
  * histórico em Caixa.jsx). Cada consulta usa o `caixa_id` gravado na hora
@@ -193,40 +205,62 @@ export async function carregarRelatorioCaixa(caixa) {
   // formato do extrato ao vivo do caixa aberto (Caixa.jsx), mais recente
   // primeiro. Saída junta as formas com " + " quando veio dividida (split).
   const formasPorMovimento = {};
-  for (const p of pagtosSaida || []) (formasPorMovimento[p.movimento_id] ||= []).push(descForma[p.forma_pagamento] || p.forma_pagamento);
+  // Parte de CADA saída paga com forma "Devedor" — pra coluna "Dívida" do
+  // extrato (ver itens abaixo). dividaGeradaTotal (acima) é só a soma.
+  const dividaGeradaPorMovimento = {};
+  for (const p of pagtosSaida || []) {
+    (formasPorMovimento[p.movimento_id] ||= []).push(descForma[p.forma_pagamento] || p.forma_pagamento);
+    if (formasDevedorCods.has(p.forma_pagamento)) {
+      dividaGeradaPorMovimento[p.movimento_id] = (dividaGeradaPorMovimento[p.movimento_id] || 0) + Number(p.valor || 0);
+    }
+  }
   const itens = [
-    ...(movs || []).map((m) => ({
-      id: `saida-${m.id}`, quando: dataHoraDe(m.dt_saida, Number(m.hr_saida)), tipo: 'Saída',
-      descricao: `${m.placa}${m.modelo ? ` — ${m.modelo}` : ''}`,
-      forma: (formasPorMovimento[m.id] || []).join(' + ') || null, valor: Number(m.valor || 0),
-    })),
+    ...(movs || []).map((m) => {
+      const dividaQuitada = Number(m.valor_dev || 0);
+      const dividaGerada = dividaGeradaPorMovimento[m.id] || 0;
+      return {
+        id: `saida-${m.id}`, quando: dataHoraDe(m.dt_saida, Number(m.hr_saida)), tipo: 'Saída',
+        descricao: `${m.placa}${m.modelo ? ` — ${m.modelo}` : ''}`,
+        forma: (formasPorMovimento[m.id] || []).join(' + ') || null,
+        // Só a tarifa DESTA estadia (tira a dívida anterior quitada, que é
+        // tarifa de uma estadia diferente — ver "divida").
+        valor: Number(m.valor || 0) - dividaQuitada,
+        // Negativo = esta saída gerou dívida nova; positivo = quitou dívida
+        // de uma saída anterior.
+        divida: dividaQuitada - dividaGerada,
+      };
+    }),
     ...(mensPagtos || []).map((p) => ({
       id: `mens-${p.id}`, quando: new Date(p.created_at), tipo: 'Mensalidade',
       descricao: p.mensalistas?.razao || '—', forma: descForma[p.forma_pagamento] || p.forma_pagamento,
-      valor: Number(p.valor_pago || 0),
+      valor: Number(p.valor_pago || 0), divida: null,
     })),
     ...(antecipadosEntrada || []).map((p) => ({
       id: `ant-${p.id}`, quando: new Date(p.created_at), tipo: 'Antecipado',
       descricao: p.movimentos?.placa ? `Entrada ${p.movimentos.placa}` : 'Entrada de veículo',
-      forma: descForma[p.forma_pagamento] || p.forma_pagamento, valor: Number(p.valor || 0),
+      forma: descForma[p.forma_pagamento] || p.forma_pagamento, valor: Number(p.valor || 0), divida: null,
     })),
     ...reservasAntecip.map((r) => ({
       id: `res-${r.id}`, quando: new Date(r.created_at), tipo: 'Antecipado',
       descricao: `Reserva${r.placa ? ` ${r.placa}` : ''}${r.nome ? ` — ${r.nome}` : ''}`,
-      forma: descForma[r.forma_antecipado] || r.forma_antecipado, valor: Number(r.valor_antecipado || 0),
+      forma: descForma[r.forma_antecipado] || r.forma_antecipado, valor: Number(r.valor_antecipado || 0), divida: null,
     })),
     ...(vendasProdutos || []).map((v) => ({
       id: `prod-${v.id}`, quando: new Date(v.criado_em), tipo: 'Produto',
       descricao: `${v.produtos?.descricao || '—'} (${Number(v.quantidade)}x)`,
-      forma: descForma[v.forma_pagamento] || v.forma_pagamento, valor: Number(v.valor_total || 0),
+      forma: descForma[v.forma_pagamento] || v.forma_pagamento, valor: Number(v.valor_total || 0), divida: null,
     })),
+    // Quitação avulsa (⋮ → Receber dívida): nenhuma tarifa nova, é 100%
+    // dívida de uma estadia anterior — valor fica nulo, tudo em "divida".
     ...(dividasPagas || []).map((p) => ({
       id: `div-${p.id}`, quando: new Date(p.criado_em), tipo: 'Dívida',
-      descricao: p.placa, forma: descForma[p.forma_pagamento] || p.forma_pagamento, valor: Number(p.valor || 0),
+      descricao: p.placa, forma: descForma[p.forma_pagamento] || p.forma_pagamento,
+      valor: null, divida: Number(p.valor || 0),
     })),
     ...(sangrias || []).map((s) => ({
       id: `sang-${s.id}`, quando: new Date(s.created_at), tipo: s.tipo === 'reforco' ? 'Reforço' : 'Sangria',
-      descricao: s.motivo || '—', forma: null, valor: s.tipo === 'reforco' ? Number(s.valor || 0) : -Number(s.valor || 0),
+      descricao: s.motivo || '—', forma: null,
+      valor: s.tipo === 'reforco' ? Number(s.valor || 0) : -Number(s.valor || 0), divida: null,
     })),
   ].sort((a, b) => b.quando - a.quando);
 
@@ -328,7 +362,7 @@ export function textoRelatorioCaixa(dados, filial, reimpressao = false, incluirM
     linhas.push('', `MOVIMENTAÇÕES (${dados.itens.length})`);
     for (const it of dados.itens) {
       const hora = it.quando.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      linhas.push(`${hora} ${it.tipo} — ${it.descricao}${it.forma ? ` (${it.forma})` : ''}: ${fmtBRL(it.valor)}`);
+      linhas.push(`${hora} ${it.tipo} — ${it.descricao}${it.forma ? ` (${it.forma})` : ''}: ${valorComDivida(it)}`);
     }
   }
 
@@ -430,7 +464,7 @@ export function imprimirRelatorioCaixa(dados, filial, reimpressao = false, inclu
     secao(`Movimentações (${dados.itens.length})`)
     + dados.itens.map((it) => linha(
         `${fmtHoraCurta(it.quando)} ${it.tipo}`,
-        `${it.descricao}${it.forma ? ` (${it.forma})` : ''} — ${fmtBRL(it.valor)}`,
+        `${it.descricao}${it.forma ? ` (${it.forma})` : ''} — ${valorComDivida(it)}`,
       )).join('')
   ) : '';
 

@@ -61,6 +61,9 @@ export default function Caixa({ perfil }) {
     // Forma(s) de pagamento de cada saída, pro extrato abaixo — split (mais
     // de uma forma na mesma saída) junta com " + ".
     const formasPorMovimento = {};
+    // Parte de CADA saída paga com forma "Devedor" — pra coluna "Dívida" do
+    // extrato (ver itens abaixo). dividaGeradaTotal (mais embaixo) é só a soma.
+    const dividaGeradaPorMovimento = {};
     if (ids.length) {
       // Só pagamento de saída (caixa_id null) — o de antecipado tem o
       // próprio caixa_id e já é somado à parte (`antecipados` abaixo), senão
@@ -75,6 +78,9 @@ export default function Caixa({ perfil }) {
       dividaGeradaTotal = (pg || []).filter((p) => formasDevedorCods.has(p.forma_pagamento)).reduce((s, p) => s + Number(p.valor || 0), 0);
       for (const p of pg || []) {
         (formasPorMovimento[p.movimento_id] ||= []).push(descForma[p.forma_pagamento] || p.forma_pagamento);
+        if (formasDevedorCods.has(p.forma_pagamento)) {
+          dividaGeradaPorMovimento[p.movimento_id] = (dividaGeradaPorMovimento[p.movimento_id] || 0) + Number(p.valor || 0);
+        }
       }
     }
     // Total gerado pelas saídas (valor cheio da tarifa, independente de forma)
@@ -143,38 +149,52 @@ export default function Caixa({ perfil }) {
     // agregado dos Kpis acima. Mais recente primeiro (mesmo critério da lista
     // do pátio).
     const itens = [
-      ...(movs || []).map((m) => ({
-        id: `saida-${m.id}`, quando: dataHoraDe(m.dt_saida, Number(m.hr_saida)), tipo: 'Saída',
-        descricao: `${m.placa}${m.modelo ? ` — ${m.modelo}` : ''}`,
-        forma: (formasPorMovimento[m.id] || []).join(' + ') || null, valor: Number(m.valor || 0),
-      })),
+      ...(movs || []).map((m) => {
+        const dividaQuitada = Number(m.valor_dev || 0);
+        const dividaGerada = dividaGeradaPorMovimento[m.id] || 0;
+        return {
+          id: `saida-${m.id}`, quando: dataHoraDe(m.dt_saida, Number(m.hr_saida)), tipo: 'Saída',
+          descricao: `${m.placa}${m.modelo ? ` — ${m.modelo}` : ''}`,
+          forma: (formasPorMovimento[m.id] || []).join(' + ') || null,
+          // Só a tarifa DESTA estadia (tira a dívida anterior quitada, que é
+          // tarifa de uma estadia diferente — ver coluna "Dívida").
+          valor: Number(m.valor || 0) - dividaQuitada,
+          // Negativo = esta saída gerou dívida nova (forma "Devedor"); positivo
+          // = quitou dívida de uma saída anterior. Ver Caixa.jsx "Dívida (turno)".
+          divida: dividaQuitada - dividaGerada,
+        };
+      }),
       ...(mensPagtos || []).map((p) => ({
         id: `mens-${p.id}`, quando: new Date(p.created_at), tipo: 'Mensalidade',
         descricao: p.mensalistas?.razao || '—', forma: descForma[p.forma_pagamento] || p.forma_pagamento,
-        valor: Number(p.valor_pago || 0),
+        valor: Number(p.valor_pago || 0), divida: null,
       })),
       ...(antecipadosEntrada || []).map((p) => ({
         id: `ant-${p.id}`, quando: new Date(p.created_at), tipo: 'Antecipado',
         descricao: p.movimentos?.placa ? `Entrada ${p.movimentos.placa}` : 'Entrada de veículo',
-        forma: descForma[p.forma_pagamento] || p.forma_pagamento, valor: Number(p.valor || 0),
+        forma: descForma[p.forma_pagamento] || p.forma_pagamento, valor: Number(p.valor || 0), divida: null,
       })),
       ...reservasAntecip.map((r) => ({
         id: `res-${r.id}`, quando: new Date(r.created_at), tipo: 'Antecipado',
         descricao: `Reserva${r.placa ? ` ${r.placa}` : ''}${r.nome ? ` — ${r.nome}` : ''}`,
-        forma: descForma[r.forma_antecipado] || r.forma_antecipado, valor: Number(r.valor_antecipado || 0),
+        forma: descForma[r.forma_antecipado] || r.forma_antecipado, valor: Number(r.valor_antecipado || 0), divida: null,
       })),
       ...(vendasProdutos || []).map((v) => ({
         id: `prod-${v.id}`, quando: new Date(v.criado_em), tipo: 'Produto',
         descricao: `${v.produtos?.descricao || '—'} (${Number(v.quantidade)}x)`,
-        forma: descForma[v.forma_pagamento] || v.forma_pagamento, valor: Number(v.valor_total || 0),
+        forma: descForma[v.forma_pagamento] || v.forma_pagamento, valor: Number(v.valor_total || 0), divida: null,
       })),
+      // Quitação avulsa (⋮ → Receber dívida): nenhuma tarifa nova, é 100%
+      // dívida de uma estadia anterior — Valor fica em branco, tudo na coluna Dívida.
       ...(dividasPagas || []).map((p) => ({
         id: `div-${p.id}`, quando: new Date(p.criado_em), tipo: 'Dívida',
-        descricao: p.placa, forma: descForma[p.forma_pagamento] || p.forma_pagamento, valor: Number(p.valor || 0),
+        descricao: p.placa, forma: descForma[p.forma_pagamento] || p.forma_pagamento,
+        valor: null, divida: Number(p.valor || 0),
       })),
       ...(sangrias || []).map((s) => ({
         id: `sang-${s.id}`, quando: new Date(s.created_at), tipo: s.tipo === 'reforco' ? 'Reforço' : 'Sangria',
-        descricao: s.motivo || '—', forma: null, valor: s.tipo === 'reforco' ? Number(s.valor || 0) : -Number(s.valor || 0),
+        descricao: s.motivo || '—', forma: null,
+        valor: s.tipo === 'reforco' ? Number(s.valor || 0) : -Number(s.valor || 0), divida: null,
       })),
     ].sort((a, b) => b.quando - a.quando);
     setMovimentacoes(itens);
@@ -330,7 +350,7 @@ export default function Caixa({ perfil }) {
         <p className="suave">Tudo que entrou (e as sangrias que saíram) neste caixa, do mais recente pro mais antigo — pra conferir antes de fechar.</p>
         <div className="tabela-scroll">
           <table>
-            <thead><tr><th>Quando</th><th>Tipo</th><th>Descrição</th><th>Forma</th><th>Valor</th></tr></thead>
+            <thead><tr><th>Quando</th><th>Tipo</th><th>Descrição</th><th>Forma</th><th>Valor</th><th>Dívida</th></tr></thead>
             <tbody>
               {movimentacoes.map((m) => (
                 <tr key={m.id}>
@@ -338,10 +358,13 @@ export default function Caixa({ perfil }) {
                   <td>{m.tipo}</td>
                   <td>{m.descricao}</td>
                   <td>{m.forma || '—'}</td>
-                  <td style={m.valor < 0 ? { color: 'var(--erro)' } : undefined}>{fmtBRL(m.valor)}</td>
+                  <td style={m.valor < 0 ? { color: 'var(--erro)' } : undefined}>{m.valor == null ? '—' : fmtBRL(m.valor)}</td>
+                  <td style={m.divida ? { color: m.divida < 0 ? 'var(--erro)' : 'var(--ok)' } : undefined}>
+                    {!m.divida || Math.abs(m.divida) < 0.005 ? '—' : `${m.divida > 0 ? '+' : ''}${fmtBRL(m.divida)}`}
+                  </td>
                 </tr>
               ))}
-              {movimentacoes.length === 0 && <tr><td colSpan={5} className="suave">Nada lançado neste turno ainda.</td></tr>}
+              {movimentacoes.length === 0 && <tr><td colSpan={6} className="suave">Nada lançado neste turno ainda.</td></tr>}
             </tbody>
           </table>
         </div>
