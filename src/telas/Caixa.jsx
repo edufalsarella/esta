@@ -350,7 +350,7 @@ export default function Caixa({ perfil }) {
         <p className="suave">Tudo que entrou (e as sangrias que saíram) neste caixa, do mais recente pro mais antigo — pra conferir antes de fechar.</p>
         <div className="tabela-scroll">
           <table>
-            <thead><tr><th>Quando</th><th>Tipo</th><th>Descrição</th><th>Forma</th><th>Valor</th><th>Dívida</th></tr></thead>
+            <thead><tr><th>Quando</th><th>Tipo</th><th>Descrição</th><th>Forma</th><th>Vl.Estadia</th><th>Dívida</th></tr></thead>
             <tbody>
               {movimentacoes.map((m) => (
                 <tr key={m.id}>
