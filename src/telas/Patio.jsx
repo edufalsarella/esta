@@ -1294,6 +1294,14 @@ export default function Patio({ perfil }) {
 
   async function confirmarSaidaInterna(tomadorDps, dadosOverride) {
     const { mov, resultado, pagamentos, convenioCodigo, valorCalculado, bonusAplicado, bonusDisponivel, servicosSelecionados, horaConvenio } = dadosOverride || saindo;
+    // Trava de verdade (os botões já ficam desabilitados com pagamentoDivergente,
+    // isto é só a garantia final antes de gravar) — soma dos pagamentos
+    // precisa bater com o valor da saída, senão o caixa fecha errado depois.
+    const totalPagoAgora = (pagamentos || []).reduce((s, p) => s + Number(p.valor || 0), 0);
+    if (Math.abs(totalPagoAgora - resultado.valor) > 0.005) {
+      setErro(`Soma dos pagamentos (${fmtBRL(totalPagoAgora)}) difere do valor (${fmtBRL(resultado.valor)}) — corrija antes de confirmar.`);
+      return;
+    }
     // Cobrança real (dinheiro entrando agora) precisa de caixa aberto pra não
     // ficar de fora do fechamento — mensalista/hóspede sem pagamento (todos
     // os itens de `pagamentos` zerados) não passa por aqui. Busca direto no
@@ -1585,6 +1593,11 @@ export default function Patio({ perfil }) {
   }
 
   const totalPago = (saindo?.pagamentos || []).reduce((s, p) => s + Number(p.valor || 0), 0);
+  // Soma dos pagamentos (ex.: split dinheiro+cartão, ou o operador alterou o
+  // valor de um deles à mão) tem que bater com o valor da saída — errando
+  // pra mais ou pra menos, o caixa fecha errado depois. Bloqueia a
+  // confirmação em vez de só avisar (ver "Confirmar saída" abaixo).
+  const pagamentoDivergente = !!saindo && Math.abs(totalPago - saindo.resultado.valor) > 0.005;
 
   // InfiniteTap (ver src/lib/infinitepay.js): só no celular, porque a leitura
   // do cartão é pelo NFC do próprio aparelho — no PC da cabine o botão não
@@ -2292,8 +2305,11 @@ export default function Patio({ perfil }) {
                   </div>
                 ))}
                 <button className="btn-ghost" onClick={addPagto} style={{ marginTop: 6 }}>+ dividir pagamento</button>
-                {Math.abs(totalPago - saindo.resultado.valor) > 0.005 && (
-                  <p className="aviso">Soma dos pagamentos ({fmtBRL(totalPago)}) difere do valor.</p>
+                {pagamentoDivergente && (
+                  <p className="aviso">
+                    Soma dos pagamentos ({fmtBRL(totalPago)}) difere do valor ({fmtBRL(saindo.resultado.valor)}) —
+                    corrija antes de confirmar.
+                  </p>
                 )}
                 {/* InfiniteTap: um botão por pagamento em cartão (o normal é um
                     só). Abre o app da InfinitePay já com o valor — depois de
@@ -2346,7 +2362,8 @@ export default function Patio({ perfil }) {
             )}
             <div className="linha-form" style={{ justifyContent: 'flex-end' }}>
               <button className="btn-ghost" onClick={cancelarSaida}>Cancelar</button>
-              <button className="btn-primary" ref={btnConfirmarSaidaRef} disabled={saindo.resultado.pedeValor || salvandoSaida} onClick={pedirConfirmacaoSaida}>
+              <button className="btn-primary" ref={btnConfirmarSaidaRef}
+                disabled={saindo.resultado.pedeValor || salvandoSaida || pagamentoDivergente} onClick={pedirConfirmacaoSaida}>
                 {salvandoSaida ? 'Confirmando…' : 'Confirmar saída'}
               </button>
             </div>
@@ -2447,11 +2464,18 @@ export default function Patio({ perfil }) {
                 se for rejeitado.
               </span>
             </div>
+            {pagamentoDivergente && (
+              <p className="aviso">
+                Soma dos pagamentos ({fmtBRL(totalPago)}) difere do valor ({fmtBRL(saindo.resultado.valor)}) —
+                cancela e corrija no card da saída antes de confirmar.
+              </p>
+            )}
             <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
               <button className="btn-ghost" onClick={() => setModalDps(null)}>Cancelar</button>
               {/* Documento em branco é permitido (vira tomador não
                   identificado); errado, não — a prefeitura rejeitaria. */}
-              <button className="btn-primary" ref={btnConfirmarDpsRef} disabled={!!erroCpfCnpj(modalDps.documento) || salvandoSaida}
+              <button className="btn-primary" ref={btnConfirmarDpsRef}
+                disabled={!!erroCpfCnpj(modalDps.documento) || salvandoSaida || pagamentoDivergente}
                 onClick={() => confirmarSaida({ cpf_cnpj: modalDps.documento, nome: modalDps.nome, issRetido: modalDps.issRetido || null })}>
                 {salvandoSaida ? 'Confirmando…' : 'Confirmar saída e gerar DPS'}
               </button>
