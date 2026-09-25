@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { fmtBRL, dataHoraDe } from '../lib/tempo.js';
-import { carregarRelatorioCaixa, imprimirRelatorioCaixa, textoRelatorioCaixa } from '../lib/caixaRelatorio.js';
+import { carregarRelatorioCaixa, imprimirRelatorioCaixa, textoRelatorioCaixa, valorComDivida } from '../lib/caixaRelatorio.js';
 import { ehGerente } from '../lib/acesso.js';
 
 const fmtQuando = (d) => d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -462,6 +462,7 @@ function RelatorioCaixaModal({ dados, filial, reimpressao, onFechar }) {
         <SecaoRelatorio titulo="Faturamento">
           <div>Valor faturado: {fmtBRL(dados.valorFaturado)}</div>
           <div>Convênio: {fmtBRL(dados.descontos)}</div>
+          <div>Dívida (turno): {dados.divida >= 0 ? '+' : ''}{fmtBRL(dados.divida)}</div>
           <div>Mensalidades: {fmtBRL(dados.mensalidadesTotal)}</div>
           <div>Antecipados: {fmtBRL(dados.antecipadosTotal)}</div>
           <div>Venda de produtos: {fmtBRL(dados.produtosTotal)}</div>
@@ -527,7 +528,7 @@ function RelatorioCaixaModal({ dados, filial, reimpressao, onFechar }) {
             {dados.itens.map((it) => (
               <div key={it.id}>
                 {it.quando.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} {it.tipo} —{' '}
-                {it.descricao}{it.forma ? ` (${it.forma})` : ''}: {fmtBRL(it.valor)}
+                {it.descricao}{it.forma ? ` (${it.forma})` : ''}: {valorComDivida(it)}
               </div>
             ))}
           </SecaoRelatorio>

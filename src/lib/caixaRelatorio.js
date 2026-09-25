@@ -13,7 +13,7 @@ function escapeHtml(s) {
  * em texto corrido aqui (WhatsApp/e-mail/impressão não têm coluna).
  * `it.valor` nulo (quitação avulsa de dívida, 100% dívida) não mostra "R$ 0,00".
  */
-function valorComDivida(it) {
+export function valorComDivida(it) {
   const valorTxt = it.valor == null ? '—' : fmtBRL(it.valor);
   if (!it.divida || Math.abs(it.divida) < 0.005) return valorTxt;
   return `${valorTxt} (dívida: ${it.divida > 0 ? '+' : ''}${fmtBRL(it.divida)})`;
