@@ -275,8 +275,15 @@ export default function BI({ perfil }) {
     function valorServicoDoMovimento(itens) {
       return itens.reduce((s, i) => s + (i.valor != null ? Number(i.valor) : (valorServicoPorTipo[i.servicos?.tabela_tipo] || 0)), 0);
     }
-    const { data: formas } = await supabase.from('formas_pagamento').select('codigo,descricao');
+    const { data: formas } = await supabase.from('formas_pagamento').select('codigo,descricao,eh_devedor');
     const descForma = Object.fromEntries((formas || []).map((f) => [f.codigo, f.descricao]));
+    const formasDevedorCods = new Set((formas || []).filter((f) => f.eh_devedor).map((f) => f.codigo));
+    // Quitação avulsa de saldo devedor no período (⋮ → Receber dívida, ver
+    // 0056_divida_pagamentos.sql) — mesma natureza de valor_dev, só que sem
+    // passar por uma saída nova (ver "Dívida" logo abaixo).
+    const { data: dividasPagas, error: errDiv } = await supabase.from('divida_pagamentos')
+      .select('*').gte('criado_em', inicio).lt('criado_em', fim);
+    if (errDiv) { setErro(errDiv.message); return; }
     // Tabela EFETIVA de cada saída pra mostrar na lista de veículos — nem
     // sempre é a do cadastro do carro (tipo_veic): convênio com tabela
     // alternativa (tab_conv) ou serviço marcado (cada um com sua própria
@@ -338,7 +345,7 @@ export default function BI({ perfil }) {
 
     const porTipo = {};
     let recebidoSaidas = 0, tabelaCheia = 0, valorServicos = 0, valorAvulso = 0, valorConvenioTotal = 0,
-      antecipadoTotal = 0, bonusTotal = 0, minutosTotal = 0, saidasComTempo = 0;
+      antecipadoTotal = 0, bonusTotal = 0, minutosTotal = 0, saidasComTempo = 0, dividaAnteriorTotal = 0;
     for (const m of movs) {
       porTipo[m.tipo_mens] = (porTipo[m.tipo_mens] || 0) + 1;
       // Dívida de uma estadia anterior cobrada nesta saída (valor_dev — ver
@@ -347,6 +354,7 @@ export default function BI({ perfil }) {
       // duas vezes (uma como dívida, outra dentro do valor desta saída),
       // inflando o Faturado do período (ver conversa de 2026-09-22).
       const dividaAnterior = Number(m.valor_dev || 0);
+      dividaAnteriorTotal += dividaAnterior;
       recebidoSaidas += Number(m.valor || 0) - dividaAnterior;
       tabelaCheia += Number(m.valor_proporcional || 0);
       valorConvenioTotal += Number(m.valor_convenio || 0);
@@ -388,10 +396,20 @@ export default function BI({ perfil }) {
     }
     const porForma = {};
     const pagtosPorMov = {};
+    // Parte das saídas do período paga com forma "Devedor" (ver Cadastros →
+    // Formas de pagamento, eh_devedor) — não entrou como dinheiro nenhum,
+    // vira saldo devedor (da placa ou de um mensalista com "Aceita Extra?"):
+    // sai do lado positivo de "Dívida" abaixo, já que gerou dívida nova em
+    // vez de quitar uma antiga. Só conta pagamento de saída (sem caixa_id —
+    // o de antecipado tem caixa_id próprio, da entrada).
+    let dividaGeradaTotal = 0;
     for (const p of pagtos) {
       const k = descForma[p.forma_pagamento] || p.forma_pagamento;
       porForma[k] = (porForma[k] || 0) + Number(p.valor || 0);
       (pagtosPorMov[p.movimento_id] ||= []).push(k);
+      if (!p.caixa_id && formasDevedorCods.has(p.forma_pagamento)) {
+        dividaGeradaTotal += Number(p.valor || 0);
+      }
     }
     const porTipoCancelado = {};
     for (const m of cancelados || []) {
@@ -409,9 +427,11 @@ export default function BI({ perfil }) {
     // foi Faturado na saída avulsa que gerou a dívida (mesmo raciocínio de
     // movimentos.valor_dev, já corrigido no Caixa/relatório de fechamento).
     const mensalidadesTotal = mensalidades.reduce((s, p) => s + p.valor, 0);
-    let mensalidadesFaturadoTotal = 0;
+    let mensalidadesFaturadoTotal = 0, mensalistaExtraTotal = 0;
     for (const p of mensPagtos || []) {
-      const faturadoDoPagamento = Number(p.valor_pago || 0) - Number(p.valor_extra || 0);
+      const extra = Number(p.valor_extra || 0);
+      mensalistaExtraTotal += extra;
+      const faturadoDoPagamento = Number(p.valor_pago || 0) - extra;
       mensalidadesFaturadoTotal += faturadoDoPagamento;
       somaOperador(p.recebido_por, faturadoDoPagamento);
       somaDia(p.dt_pagamento, { faturado: faturadoDoPagamento });
@@ -456,6 +476,18 @@ export default function BI({ perfil }) {
     // aparecia com "desconto de convênio" — foi exatamente o bug relatado.
     const descontos = valorConvenioTotal;
 
+    // Quitação avulsa (⋮ → Receber dívida) — mesma natureza de valor_dev,
+    // dinheiro de verdade recebido no período, mas não é receita nova (já
+    // foi Faturado quando a dívida nasceu).
+    const dividaAvulsaTotal = (dividasPagas || []).reduce((s, p) => s + Number(p.valor || 0), 0);
+    // "Dívida" do período: negativo quando o período GEROU mais dívida nova
+    // do que quitou (saiu do "Faturado" pra debaixo do "Recebido" — ainda não
+    // é dinheiro de verdade); positivo quando quitou mais dívida antiga do
+    // que gerou — numa saída nova, avulsa (⋮ → Receber dívida) ou numa
+    // mensalidade (⋮ → Mensalistas → Receber) — mesmo raciocínio de
+    // "Dívida (turno)" em Caixa.jsx, só que somado pro período inteiro.
+    const divida = dividaAnteriorTotal + dividaAvulsaTotal + mensalistaExtraTotal - dividaGeradaTotal;
+
     // Por tipo de lavagem/serviço: quantidade de vezes usado + valor total.
     // Serviço "Pede valor" (valor informado ao marcar) usa esse valor exato;
     // o cobrado pela tabela usa o valor_servico fixo dela (ver
@@ -478,7 +510,7 @@ export default function BI({ perfil }) {
       // pra conferir a olho (era esse o problema antes: antecipado/bônus
       // entravam na conta sem aparecer em lugar nenhum).
       faturado: valorAvulso + valorServicos + valorConvenioTotal + antecipadoTotal + bonusTotal + mensalidadesFaturadoTotal + produtosTotal,
-      recebidoSaidas, descontos, valorServicos, antecipados: antecipadoTotal, bonus: bonusTotal,
+      recebidoSaidas, descontos, valorServicos, antecipados: antecipadoTotal, bonus: bonusTotal, divida,
       porTipo, porTipoCancelado, recebidoPorForma, porServico,
       tempoMedio: saidasComTempo ? minutosParaHHMM(Math.round(minutosTotal / saidasComTempo)) : 0,
       mensalidades, mensalidadesTotal,
@@ -556,6 +588,9 @@ export default function BI({ perfil }) {
             <Kpi rotulo="Avulso" valor={fmtBRL(dados.valorAvulso)} moeda />
             <Kpi rotulo="Serviços" valor={fmtBRL(dados.valorServicos)} moeda />
             <Kpi rotulo="Convênio" valor={fmtBRL(dados.descontos)} moeda />
+            <Kpi rotulo="Dívida"
+              valor={(dados.divida < 0 ? '-' : dados.divida > 0 ? '+' : '') + fmtBRL(Math.abs(dados.divida))}
+              moeda destaque={dados.divida < 0} />
             <Kpi rotulo="Antecipados" valor={fmtBRL(dados.antecipados)} moeda />
             <Kpi rotulo="Bônus fidelidade" valor={fmtBRL(dados.bonus)} moeda />
             <Kpi rotulo="Tempo médio" valor={fmtHora(dados.tempoMedio)} />
@@ -566,6 +601,11 @@ export default function BI({ perfil }) {
           <p className="suave" style={{ marginTop: -4 }}>
             Faturado = Avulso + Serviços + Convênio + Antecipados + Bônus fidelidade +
             Mensalidades + Venda de produtos — o valor cheio, antes de qualquer desconto/abatimento.
+            "Dívida" mostra o saldo de dívida do período — gerada numa saída (forma "Devedor") ou
+            quitada (numa saída nova, avulsa — ⋮ → Receber dívida — ou numa mensalidade): negativo
+            quando o período gerou mais dívida nova do que quitou (ela conta em "Faturado", mas ainda
+            não é dinheiro de verdade), positivo quando quitou mais dívida antiga do que gerou (é
+            dinheiro recebido agora, mas não é receita nova — já tinha contado lá atrás).
           </p>
 
           {dados.resumoDiario.length > 1 && (
