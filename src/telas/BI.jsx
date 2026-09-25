@@ -402,10 +402,19 @@ export default function BI({ perfil }) {
       mensalista: p.mensalistas?.razao || '—', valor: Number(p.valor_pago || 0),
       forma: descForma[p.forma_pagamento] || p.forma_pagamento,
     }));
+    // "Mensalidades recebidas" (lista/total acima) mostra o valor CHEIO pago
+    // — é o recibo de verdade. Mas pro Faturado, a parte que é dívida de
+    // avulso já cobrada (valor_extra — ver Pátio → Devedor → "Mensalista" e
+    // 0057_mensalista_extras.sql) não pode contar de novo: essa receita já
+    // foi Faturado na saída avulsa que gerou a dívida (mesmo raciocínio de
+    // movimentos.valor_dev, já corrigido no Caixa/relatório de fechamento).
     const mensalidadesTotal = mensalidades.reduce((s, p) => s + p.valor, 0);
+    let mensalidadesFaturadoTotal = 0;
     for (const p of mensPagtos || []) {
-      somaOperador(p.recebido_por, Number(p.valor_pago || 0));
-      somaDia(p.dt_pagamento, { faturado: Number(p.valor_pago || 0) });
+      const faturadoDoPagamento = Number(p.valor_pago || 0) - Number(p.valor_extra || 0);
+      mensalidadesFaturadoTotal += faturadoDoPagamento;
+      somaOperador(p.recebido_por, faturadoDoPagamento);
+      somaDia(p.dt_pagamento, { faturado: faturadoDoPagamento });
     }
 
     const produtosVendidos = (vendasProdutos || []).map((v) => ({
@@ -468,7 +477,7 @@ export default function BI({ perfil }) {
       // tela, então o Faturado sempre bate com a soma das colunas que dá
       // pra conferir a olho (era esse o problema antes: antecipado/bônus
       // entravam na conta sem aparecer em lugar nenhum).
-      faturado: valorAvulso + valorServicos + valorConvenioTotal + antecipadoTotal + bonusTotal + mensalidadesTotal + produtosTotal,
+      faturado: valorAvulso + valorServicos + valorConvenioTotal + antecipadoTotal + bonusTotal + mensalidadesFaturadoTotal + produtosTotal,
       recebidoSaidas, descontos, valorServicos, antecipados: antecipadoTotal, bonus: bonusTotal,
       porTipo, porTipoCancelado, recebidoPorForma, porServico,
       tempoMedio: saidasComTempo ? minutosParaHHMM(Math.round(minutosTotal / saidasComTempo)) : 0,

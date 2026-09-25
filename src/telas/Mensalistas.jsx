@@ -72,6 +72,10 @@ export default function Mensalistas({ perfil }) {
       // motor lê como "usa o padrão 6h/12h/18h" (ver restricaoMensalista.js).
       restr_manha: m.restr_manha || null, restr_tarde: m.restr_tarde || null, restr_noite: m.restr_noite || null,
       periodo1: Number(m.periodo1 || 0), periodo2: Number(m.periodo2 || 0), periodo3: Number(m.periodo3 || 0),
+      // "Aceita Extra?" (HORAEXTRA do legado) — aparece na lista de quem pode
+      // receber dívida de avulso na saída (Pátio → Devedor → Mensalista, ver
+      // 0057_mensalista_extras.sql).
+      hora_extra: m.hora_extra ?? false,
       ativo: m.ativo ?? true,
     };
     const res = m.id
@@ -90,9 +94,11 @@ export default function Mensalistas({ perfil }) {
   }
 
   // Grava o evento de recebimento e avança o próximo pagamento no cadastro.
-  async function receber({ mensalista, dtPagamento, valor, forma, proximo, observacao }) {
+  async function receber({ mensalista, dtPagamento, valor, forma, proximo, observacao, extrasIds, valorExtra }) {
     setErro('');
-    const { error, pagamento } = await receberMensalidade({ perfil, mensalista, dtPagamento, valor, forma, proximo, observacao });
+    const { error, pagamento } = await receberMensalidade({
+      perfil, mensalista, dtPagamento, valor, forma, proximo, observacao, extrasIds, valorExtra,
+    });
     if (error) { setErro(error); return; }
     // Reflete a nova data no selecionado (recarrega o histórico logo abaixo).
     setSel((s) => (s && s.id === mensalista.id ? { ...s, proximo_pagamento: proximo } : s));
@@ -379,6 +385,13 @@ function HeaderModal({ inicial, onSalvar, onExcluir, onFechar }) {
             <input type="number" min="1" value={m.qte_vagas ?? 1} onChange={(e) => set('qte_vagas', e.target.value)} required />
           </div>
           <RestricaoTurnos m={m} set={set} />
+          <label className="campo-check" style={{ marginBottom: 4 }}>
+            <input type="checkbox" checked={m.hora_extra ?? false} onChange={(e) => set('hora_extra', e.target.checked)} /> Aceita Extra?
+          </label>
+          <p className="suave" style={{ fontSize: 11, marginTop: 0, marginBottom: 10 }}>
+            Aparece na lista pra receber dívida de avulso na saída do pátio (forma "Devedor" →
+            "Mensalista") — o valor fica pendente até a próxima mensalidade dele ser recebida.
+          </p>
           <label className="campo-check" style={{ marginBottom: 10 }}>
             <input type="checkbox" checked={m.ativo ?? true} onChange={(e) => set('ativo', e.target.checked)} /> Ativo
           </label>

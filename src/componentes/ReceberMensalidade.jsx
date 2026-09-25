@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { hojeISO, proximoVencimento, primeiroVencimento, diferencaEmDias, dentroDoVencimento, fmtDataBR, fmtBRL } from '../lib/tempo.js';
-import { receberMensalidade, ticketRecebimentoComModelo, descricaoForma } from '../lib/mensalidade.js';
+import { receberMensalidade, buscarExtrasPendentes, ticketRecebimentoComModelo, descricaoForma } from '../lib/mensalidade.js';
 import { criarNotaFiscal } from '../lib/notaFiscal.js';
 import { AR_PARA_ABRASF } from '../lib/issRetido.js';
 import { nfseAtivo } from '../lib/acesso.js';
@@ -37,6 +37,21 @@ export function ReceberModal({ mensalista, formas, semCaixa, perfil, filial, onA
   const [proximo, setProximo] = useState(proximoInicial);
   const [observacao, setObservacao] = useState('');
   const [gerarNota, setGerarNota] = useState(nfseAtivo(filial) && !!mensalista.cpf_cnpj);
+
+  // Dívida de avulso pendente atribuída a este mensalista (ver Pátio → saída
+  // → Devedor → "Mensalista", 0057_mensalista_extras.sql) — some no valor
+  // deste pagamento sob demanda (botão "Incluir"), nunca sozinho: o operador
+  // vê antes o que é (quais placas, quanto).
+  const [extras, setExtras] = useState({ extras: [], total: 0 });
+  const [extrasIncluidos, setExtrasIncluidos] = useState(false);
+  useEffect(() => {
+    buscarExtrasPendentes(mensalista.id).then((r) => setExtras(r));
+  }, [mensalista.id]);
+
+  function incluirExtras() {
+    setValor(String(Math.round((Number(valor || 0) + extras.total) * 100) / 100));
+    setExtrasIncluidos(true);
+  }
 
   // Forma padrão = dinheiro (como na saída do pátio).
   useEffect(() => {
@@ -84,7 +99,23 @@ export function ReceberModal({ mensalista, formas, semCaixa, perfil, filial, onA
             </div>
           </>
         ) : (
-        <form onSubmit={(e) => { e.preventDefault(); onConfirmar({ mensalista, dtPagamento, valor, forma, proximo, observacao, gerarNota }); }}>
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          onConfirmar({
+            mensalista, dtPagamento, valor, forma, proximo, observacao, gerarNota,
+            extrasIds: extrasIncluidos ? extras.extras.map((x) => x.id) : [],
+            valorExtra: extrasIncluidos ? extras.total : 0,
+          });
+        }}>
+          {extras.total > 0 && (
+            <p className={extrasIncluidos ? 'suave' : 'aviso'} style={{ marginTop: 0 }}>
+              Dívida de avulso pendente: {fmtBRL(extras.total)}
+              {' '}({extras.extras.map((x) => x.placa).join(', ')}).
+              {extrasIncluidos ? ' Já incluída no valor abaixo.' : (
+                <> <button type="button" className="btn-ghost" onClick={incluirExtras} style={{ padding: '2px 8px' }}>Incluir</button></>
+              )}
+            </p>
+          )}
           <div className="linha-form" style={{ marginBottom: 10 }}>
             <div className="campo" style={{ flex: "1 1 180px", minWidth: 0 }}>
               <label>Data do pagamento</label>
@@ -213,9 +244,11 @@ export default function ReceberMensalidadeFluxo({ perfil, formas, caixaAberto, o
   const [mensalista, setMensalista] = useState(null); // null = ainda escolhendo na lista
   const [erro, setErro] = useState('');
 
-  async function confirmar({ mensalista: m, dtPagamento, valor, forma, proximo, observacao, gerarNota }) {
+  async function confirmar({ mensalista: m, dtPagamento, valor, forma, proximo, observacao, gerarNota, extrasIds, valorExtra }) {
     setErro('');
-    const { error, pagamento } = await receberMensalidade({ perfil, mensalista: m, dtPagamento, valor, forma, proximo, observacao });
+    const { error, pagamento } = await receberMensalidade({
+      perfil, mensalista: m, dtPagamento, valor, forma, proximo, observacao, extrasIds, valorExtra,
+    });
     if (error) { setErro(error); return; }
     let ticketRps = null;
     if (gerarNota && nfseAtivo(filial)) {

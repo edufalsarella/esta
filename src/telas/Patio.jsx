@@ -109,6 +109,9 @@ export default function Patio({ perfil }) {
   const [produtos, setProdutos] = useState([]);
   const [abrirVendaProdutos, setAbrirVendaProdutos] = useState(false); // fluxo de "Venda Produtos" (menu ⋮)
   const [abrirReceberDivida, setAbrirReceberDivida] = useState(false); // fluxo de "Receber dívida" (menu ⋮)
+  // Escolher mensalista pra receber a dívida (forma "Devedor" → "Mensalista"
+  // num pagamento da saída) — índice do pagamento sendo editado, ou null.
+  const [modalEscolherMensalista, setModalEscolherMensalista] = useState(null);
   const [pendenteCaixa, setPendenteCaixa] = useState(null); // { executar } — ação de recebimento esperando caixa aberto
   const placaRef = useRef(null);
   const buscaModeloRef = useRef(null);
@@ -1302,6 +1305,12 @@ export default function Patio({ perfil }) {
       setErro(`Soma dos pagamentos (${fmtBRL(totalPagoAgora)}) difere do valor (${fmtBRL(resultado.valor)}) — corrija antes de confirmar.`);
       return;
     }
+    // Mesma garantia final pro "Mensalista" escolhido sem mensalista nenhum
+    // (ver mensalistaExtraPendente) — o valor não pode sumir.
+    if ((pagamentos || []).some((p) => formasDevedorCods.has(p.forma) && p.dividaTipo === 'mensalista' && !p.mensalistaId)) {
+      setErro('Escolha o mensalista (ou volte pra "Avulso") antes de confirmar.');
+      return;
+    }
     // Cobrança real (dinheiro entrando agora) precisa de caixa aberto pra não
     // ficar de fora do fechamento — mensalista/hóspede sem pagamento (todos
     // os itens de `pagamentos` zerados) não passa por aqui. Busca direto no
@@ -1384,14 +1393,22 @@ export default function Patio({ perfil }) {
     }
 
     // Forma "Devedor" (ver Cadastros → Formas de pagamento, eh_devedor): a
-    // parte paga com ela não entrou em caixa — vira saldo devedor da placa,
-    // cobrado junto com a estadia da próxima entrada (dividaAnterior/valor_dev,
-    // ver detectar() e calcularResultadoSaida acima). Zera/atualiza mesmo
-    // quando não há dívida nova, pra não deixar um saldo velho pendurado.
+    // parte paga com ela não entrou em caixa. Dois destinos possíveis, um por
+    // linha de pagamento (dividaTipo, ver o seletor "Avulso"/"Mensalista" no
+    // card): "avulso" (padrão) vira saldo devedor da PLACA, cobrado junto com
+    // a estadia da próxima entrada (dividaAnterior/valor_dev, ver detectar()
+    // e calcularResultadoSaida acima); "mensalista" vira pendência na
+    // mensalidade de um mensalista com "Aceita Extra?" (ver
+    // 0057_mensalista_extras.sql) — a empresa/mensalista paga depois, não a
+    // placa avulsa que passou pelo pátio.
     const formasDevedor = new Set(formas.filter((f) => f.eh_devedor).map((f) => f.codigo));
-    const novaDivida = pagos.filter((p) => formasDevedor.has(p.forma)).reduce((s, p) => s + Number(p.valor), 0);
+    const pagosDevedor = pagos.filter((p) => formasDevedor.has(p.forma));
+    const novaDivida = pagosDevedor.filter((p) => p.dividaTipo !== 'mensalista').reduce((s, p) => s + Number(p.valor), 0);
     if (novaDivida > 0 || Number(mov.valor_dev || 0) > 0) {
       await atualizarSaldoDevedor(mov.placa, novaDivida);
+    }
+    for (const p of pagosDevedor.filter((p) => p.dividaTipo === 'mensalista' && p.mensalistaId)) {
+      await criarExtraMensalista({ mensalistaId: p.mensalistaId, movimentoId: mov.id, placa: mov.placa, valor: Number(p.valor) });
     }
 
     let ticketRps = null;
@@ -1592,12 +1609,35 @@ export default function Patio({ perfil }) {
     } catch { /* best-effort, igual fidelidade */ }
   }
 
+  // Dívida de avulso atribuída a um mensalista (ver confirmarSaida, forma
+  // "Devedor" → "Mensalista") — uma linha nova por saída, nunca substitui
+  // (ver 0057_mensalista_extras.sql): fica pendente até a próxima
+  // mensalidade dele ser recebida (ReceberMensalidade.jsx soma os pendentes).
+  async function criarExtraMensalista({ mensalistaId, movimentoId, placa, valor }) {
+    try {
+      await supabase.from('mensalista_extras').insert({
+        filial_id: perfil.filial_id, mensalista_id: mensalistaId, movimento_id: movimentoId, placa, valor,
+      });
+    } catch { /* best-effort, igual saldo devedor */ }
+  }
+
   const totalPago = (saindo?.pagamentos || []).reduce((s, p) => s + Number(p.valor || 0), 0);
   // Soma dos pagamentos (ex.: split dinheiro+cartão, ou o operador alterou o
   // valor de um deles à mão) tem que bater com o valor da saída — errando
   // pra mais ou pra menos, o caixa fecha errado depois. Bloqueia a
   // confirmação em vez de só avisar (ver "Confirmar saída" abaixo).
   const pagamentoDivergente = !!saindo && Math.abs(totalPago - saindo.resultado.valor) > 0.005;
+  // Forma "Devedor" pede um destino: "Avulso" (padrão, vira saldo devedor da
+  // placa, como sempre) ou "Mensalista" (vira pendência na mensalidade de um
+  // mensalista com "Aceita Extra?" — ver 0057_mensalista_extras.sql).
+  const formasDevedorCods = new Set(formas.filter((f) => f.eh_devedor).map((f) => f.codigo));
+  // "Mensalista" escolhido sem escolher QUAL mensalista: o valor não pode
+  // sumir (não vira saldo devedor da placa nem pendência de mensalista
+  // nenhum) — bloqueia a confirmação até escolher, mesmo espírito de
+  // pagamentoDivergente acima.
+  const mensalistaExtraPendente = !!saindo && saindo.pagamentos.some(
+    (p) => formasDevedorCods.has(p.forma) && p.dividaTipo === 'mensalista' && !p.mensalistaId
+  );
 
   // InfiniteTap (ver src/lib/infinitepay.js): só no celular, porque a leitura
   // do cartão é pelo NFC do próprio aparelho — no PC da cabine o botão não
@@ -2105,6 +2145,20 @@ export default function Patio({ perfil }) {
         </div>
       )}
 
+      {modalEscolherMensalista != null && (
+        // Mesmo raciocínio de z-index do "Abrir caixa" acima: nasce de dentro
+        // do modal de saída já aberto.
+        <MensalistaExtraModal
+          zIndex={60}
+          onSelecionar={(m) => {
+            atualizaPagto(modalEscolherMensalista, 'mensalistaId', m.id);
+            atualizaPagto(modalEscolherMensalista, 'mensalistaNome', m.razao);
+            setModalEscolherMensalista(null);
+          }}
+          onFechar={() => setModalEscolherMensalista(null)}
+        />
+      )}
+
       {modalSenhaMes && (
         <div className="modal-bg" onClick={() => setModalSenhaMes(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 'min(480px, 92vw)' }}>
@@ -2288,20 +2342,52 @@ export default function Patio({ perfil }) {
               <div style={{ margin: '12px 0' }}>
                 <label className="suave">Pagamento</label>
                 {saindo.pagamentos.map((p, i) => (
-                  <div className="linha-form" key={i} style={{ marginTop: 6 }}>
-                    <select value={p.forma} onChange={(e) => atualizaPagto(i, 'forma', e.target.value)}>
-                      {formas.map((f) => (
-                        <option key={f.codigo} value={f.codigo}>
-                          {/* Marca a forma Sem Parar só quando ESTE veículo tem
-                              autorização válida — escolhê-la fora disso dá erro
-                              ao confirmar (ver confirmarSaida). */}
-                          {f.eh_semparar && saindo.mov.semparar_status === 'autorizado' ? '🅿️ ' : ''}{f.descricao}
-                        </option>
-                      ))}
-                    </select>
-                    <input type="number" step="0.01" value={p.valor}
-                      onChange={(e) => atualizaPagto(i, 'valor', e.target.value)} style={{ width: 120 }} />
-                    {saindo.pagamentos.length > 1 && <button className="btn-ghost" onClick={() => removePagto(i)}>×</button>}
+                  <div key={i} style={{ marginTop: 6 }}>
+                    <div className="linha-form">
+                      <select value={p.forma} onChange={(e) => atualizaPagto(i, 'forma', e.target.value)}>
+                        {formas.map((f) => (
+                          <option key={f.codigo} value={f.codigo}>
+                            {/* Marca a forma Sem Parar só quando ESTE veículo tem
+                                autorização válida — escolhê-la fora disso dá erro
+                                ao confirmar (ver confirmarSaida). */}
+                            {f.eh_semparar && saindo.mov.semparar_status === 'autorizado' ? '🅿️ ' : ''}{f.descricao}
+                          </option>
+                        ))}
+                      </select>
+                      <input type="number" step="0.01" value={p.valor}
+                        onChange={(e) => atualizaPagto(i, 'valor', e.target.value)} style={{ width: 120 }} />
+                      {saindo.pagamentos.length > 1 && <button className="btn-ghost" onClick={() => removePagto(i)}>×</button>}
+                    </div>
+                    {/* "Devedor" pede destino: placa (padrão, como sempre) ou um
+                        mensalista com "Aceita Extra?" (ver 0057_mensalista_extras.sql) —
+                        útil quando quem paga de verdade é a empresa/mensalista,
+                        não o motorista avulso. */}
+                    {formasDevedorCods.has(p.forma) && (
+                      <div className="linha-form" style={{ marginTop: 4, alignItems: 'center' }}>
+                        <select value={p.dividaTipo || 'avulso'}
+                          onChange={(e) => {
+                            atualizaPagto(i, 'dividaTipo', e.target.value);
+                            if (e.target.value !== 'mensalista') { atualizaPagto(i, 'mensalistaId', null); atualizaPagto(i, 'mensalistaNome', null); }
+                          }} style={{ maxWidth: 150 }}>
+                          <option value="avulso">Avulso</option>
+                          <option value="mensalista">Mensalista</option>
+                        </select>
+                        {p.dividaTipo === 'mensalista' && (
+                          p.mensalistaNome ? (
+                            <span className="suave">
+                              {p.mensalistaNome}{' '}
+                              <button type="button" className="btn-ghost" onClick={() => setModalEscolherMensalista(i)} style={{ padding: '2px 8px' }}>
+                                trocar
+                              </button>
+                            </span>
+                          ) : (
+                            <button type="button" className="btn-ghost" onClick={() => setModalEscolherMensalista(i)}>
+                              Escolher mensalista
+                            </button>
+                          )
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
                 <button className="btn-ghost" onClick={addPagto} style={{ marginTop: 6 }}>+ dividir pagamento</button>
@@ -2310,6 +2396,9 @@ export default function Patio({ perfil }) {
                     Soma dos pagamentos ({fmtBRL(totalPago)}) difere do valor ({fmtBRL(saindo.resultado.valor)}) —
                     corrija antes de confirmar.
                   </p>
+                )}
+                {mensalistaExtraPendente && (
+                  <p className="aviso">Escolha o mensalista (ou volte pra "Avulso") antes de confirmar.</p>
                 )}
                 {/* InfiniteTap: um botão por pagamento em cartão (o normal é um
                     só). Abre o app da InfinitePay já com o valor — depois de
@@ -2363,7 +2452,8 @@ export default function Patio({ perfil }) {
             <div className="linha-form" style={{ justifyContent: 'flex-end' }}>
               <button className="btn-ghost" onClick={cancelarSaida}>Cancelar</button>
               <button className="btn-primary" ref={btnConfirmarSaidaRef}
-                disabled={saindo.resultado.pedeValor || salvandoSaida || pagamentoDivergente} onClick={pedirConfirmacaoSaida}>
+                disabled={saindo.resultado.pedeValor || salvandoSaida || pagamentoDivergente || mensalistaExtraPendente}
+                onClick={pedirConfirmacaoSaida}>
                 {salvandoSaida ? 'Confirmando…' : 'Confirmar saída'}
               </button>
             </div>
@@ -2470,12 +2560,15 @@ export default function Patio({ perfil }) {
                 cancela e corrija no card da saída antes de confirmar.
               </p>
             )}
+            {mensalistaExtraPendente && (
+              <p className="aviso">Cancela e escolha o mensalista no card da saída antes de confirmar.</p>
+            )}
             <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
               <button className="btn-ghost" onClick={() => setModalDps(null)}>Cancelar</button>
               {/* Documento em branco é permitido (vira tomador não
                   identificado); errado, não — a prefeitura rejeitaria. */}
               <button className="btn-primary" ref={btnConfirmarDpsRef}
-                disabled={!!erroCpfCnpj(modalDps.documento) || salvandoSaida || pagamentoDivergente}
+                disabled={!!erroCpfCnpj(modalDps.documento) || salvandoSaida || pagamentoDivergente || mensalistaExtraPendente}
                 onClick={() => confirmarSaida({ cpf_cnpj: modalDps.documento, nome: modalDps.nome, issRetido: modalDps.issRetido || null })}>
                 {salvandoSaida ? 'Confirmando…' : 'Confirmar saída e gerar DPS'}
               </button>
@@ -2499,6 +2592,62 @@ export default function Patio({ perfil }) {
 
 function rotuloTipo(t) {
   return { E: 'Avulso', I: 'Mensalista', P: 'Pacote', H: 'Hóspede', C: 'Convênio' }[t] || t;
+}
+
+/**
+ * Lista de mensalistas com "Aceita Extra?" ligado (ver Mensalistas.jsx,
+ * hora_extra) — só esses aparecem pra receber dívida de avulso na saída
+ * (forma "Devedor" → "Mensalista", ver 0057_mensalista_extras.sql).
+ */
+function MensalistaExtraModal({ onSelecionar, onFechar, zIndex }) {
+  const [lista, setLista] = useState([]);
+  const [busca, setBusca] = useState('');
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    supabase.from('mensalistas').select('id, codigo, razao').eq('ativo', true).eq('hora_extra', true).order('razao')
+      .then(({ data }) => { setLista(data || []); setCarregando(false); });
+  }, []);
+
+  const alvo = busca.trim().toLowerCase();
+  const filtrada = alvo
+    ? lista.filter((m) => m.razao.toLowerCase().includes(alvo) || m.codigo.toLowerCase().includes(alvo))
+    : lista;
+
+  return (
+    <div className="modal-bg" style={{ zIndex }} onClick={onFechar}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 420, maxHeight: '85vh', overflow: 'auto' }}>
+        <h2>Escolher mensalista</h2>
+        <p className="suave">Só aparecem os que têm "Aceita Extra?" marcado no cadastro.</p>
+        <div className="campo" style={{ marginBottom: 10 }}>
+          <label>Buscar</label>
+          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Nome ou código…" autoFocus />
+        </div>
+        <div className="tabela-scroll">
+          <table>
+            <tbody>
+              {filtrada.map((m) => (
+                <tr key={m.id}>
+                  <td>{m.razao}<div className="suave" style={{ fontSize: 12 }}>{m.codigo}</div></td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button className="btn-primary" onClick={() => onSelecionar(m)}>Selecionar</button>
+                  </td>
+                </tr>
+              ))}
+              {!carregando && filtrada.length === 0 && (
+                <tr><td colSpan={2} className="suave">
+                  {lista.length === 0 ? 'Nenhum mensalista com "Aceita Extra?" marcado.' : 'Nenhum mensalista encontrado.'}
+                </td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+          <button className="btn-ghost" onClick={onFechar}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /** Tabela que o motor usou: a do convênio (Tabela alt.), se houver, ou a da entrada. */

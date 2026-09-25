@@ -3,11 +3,32 @@ import { fmtDataBR, fmtBRL } from './tempo.js';
 import { carregarModelosTicket } from './dados.js';
 import { dadosFilial, dadosMensalista, dadosMensalidade } from './dadosTicket.js';
 
+/**
+ * Dívidas de avulso pendentes atribuídas a este mensalista (ver Pátio →
+ * saída → Devedor → "Mensalista" e 0057_mensalista_extras.sql) — somadas no
+ * valor sugerido do próximo pagamento (ver ReceberMensalidade.jsx).
+ */
+export async function buscarExtrasPendentes(mensalistaId) {
+  const { data, error } = await supabase.from('mensalista_extras')
+    .select('id, placa, valor, criado_em').eq('mensalista_id', mensalistaId).is('cobrado_em', null)
+    .order('criado_em');
+  if (error) return { error: error.message, extras: [], total: 0 };
+  const extras = data || [];
+  return { error: null, extras, total: extras.reduce((s, e) => s + Number(e.valor || 0), 0) };
+}
+
 // Grava o evento de recebimento (mensalista_pagamentos), liga ao caixa aberto
 // do operador (se houver, pra entrar no fechamento) e avança o próximo
 // pagamento no cadastro do mensalista. Compartilhado entre a tela de
 // Mensalistas e o recebimento rápido do Pátio.
-export async function receberMensalidade({ perfil, mensalista, dtPagamento, valor, forma, proximo, observacao }) {
+//
+// `extrasIds`/`valorExtra` (opcionais): dívidas de avulso pendentes (ver
+// buscarExtrasPendentes) que este pagamento está cobrando junto — gravadas
+// em valor_pago normalmente (o mensalista realmente pagou esse tanto a
+// mais), mas separadas em valor_extra pra não contar como Faturado novo
+// (essa receita já foi contabilizada na saída avulsa que gerou a dívida —
+// ver Caixa.jsx "Dívida (turno)", mesmo raciocínio de movimentos.valor_dev).
+export async function receberMensalidade({ perfil, mensalista, dtPagamento, valor, forma, proximo, observacao, extrasIds = [], valorExtra = 0 }) {
   const { data: cx } = await supabase.from('caixas').select('id')
     .eq('operador_id', perfil.id).eq('status', 'aberto').maybeSingle();
   const { data: pagamento, error: errPag } = await supabase.from('mensalista_pagamentos').insert({
@@ -15,13 +36,22 @@ export async function receberMensalidade({ perfil, mensalista, dtPagamento, valo
     dt_pagamento: dtPagamento, valor_pago: Number(valor), forma_pagamento: forma,
     proximo_pagamento: proximo, proximo_anterior: mensalista.proximo_pagamento || null,
     observacao: observacao?.trim() || null, recebido_por: perfil.id,
-    caixa_id: cx?.id ?? null,
+    caixa_id: cx?.id ?? null, valor_extra: Number(valorExtra || 0),
   }).select().single();
   if (errPag) return { error: errPag.message };
 
   const { error: errCad } = await supabase.from('mensalistas')
     .update({ proximo_pagamento: proximo }).eq('id', mensalista.id);
   if (errCad) return { error: `Pagamento gravado, mas o cadastro não foi atualizado: ${errCad.message}`, pagamento };
+
+  if (extrasIds.length) {
+    // Best-effort: o pagamento já está gravado: uma falha aqui deixaria a
+    // dívida marcada como pendente de novo (não desaparece, só fica pra
+    // conferir na mão — não é motivo pra reverter o recebimento).
+    await supabase.from('mensalista_extras')
+      .update({ cobrado_em: new Date().toISOString(), mensalidade_pagamento_id: pagamento.id })
+      .in('id', extrasIds);
+  }
 
   return { error: null, pagamento };
 }
