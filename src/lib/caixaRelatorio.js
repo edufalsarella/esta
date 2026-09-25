@@ -128,6 +128,14 @@ export async function carregarRelatorioCaixa(caixa) {
     id: p.id, nome: p.mensalistas?.razao || '—', valor: Number(p.valor_pago || 0), forma: p.forma_pagamento,
   }));
   const mensalidadesTotal = mensalidades.reduce((s, p) => s + p.valor, 0);
+  // Parte de mensalidades recebidas neste turno que é dívida de avulso já
+  // cobrada antes (ver Pátio → Devedor → "Mensalista", 0057_mensalista_extras.sql)
+  // — mesma natureza de dividaAvulsaTotal, só que quitada dentro do próprio
+  // pagamento de mensalidade. Usada pra "Dívida (turno)" não sumir essa
+  // quitação, e pra tirar do lado "mensalidadesNetas" de totalRecebido (senão
+  // esse mesmo dinheiro conta duas vezes: uma em mensalidadesTotal cheio,
+  // outra de novo aqui em "divida").
+  const mensalistaExtraTotal = (mensPagtos || []).reduce((s, p) => s + Number(p.valor_extra || 0), 0);
 
   const produtos = (vendasProdutos || []).map((v) => ({
     id: v.id, nome: v.produtos ? `${v.produtos.codigo} — ${v.produtos.descricao}` : '—',
@@ -188,15 +196,21 @@ export async function carregarRelatorioCaixa(caixa) {
   // "Dívida (turno)": negativo quando este turno gerou dívida nova (saiu do
   // Total recebido, mas ainda é dinheiro que vai entrar um dia); positivo
   // quando este turno quitou dívida de um turno anterior — embutida numa
-  // saída nova ou avulsa (⋮ → Receber dívida) — entrou no Total recebido de
-  // agora, mas não é receita nova nenhuma.
-  const divida = dividaAnteriorTotal + dividaAvulsaTotal - dividaGeradaTotal;
+  // saída nova, avulsa (⋮ → Receber dívida) ou numa mensalidade (⋮ →
+  // Mensalistas → Receber) — entrou no Total recebido de agora, mas não é
+  // receita nova nenhuma.
+  const divida = dividaAnteriorTotal + dividaAvulsaTotal + mensalistaExtraTotal - dividaGeradaTotal;
 
   // recebidoSaidas já tirou a dívida ANTERIOR quitada (não é receita nova,
   // ver acima) — pra caixa/dinheiro ela tem que voltar (é dinheiro de
   // verdade entrando agora), então some `divida` (= quitada - gerada, já
-  // incluindo a avulsa) de volta em vez de só subtrair dividaGeradaTotal de novo.
-  const totalRecebido = recebidoSaidas + divida + mensalidadesTotal + antecipadosTotal + produtosTotal;
+  // incluindo a avulsa e a de mensalidade) de volta em vez de só subtrair
+  // dividaGeradaTotal de novo. Mesmo raciocínio, mensalidadesTotal teve que
+  // tirar a parte que já voltou via `divida` (mensalistaExtraTotal), senão
+  // conta duas vezes o mesmo dinheiro (mensalidadesTotal continua CHEIO na
+  // seção "Mensalidades recebidas" — só aqui em totalRecebido que precisa da
+  // versão líquida).
+  const totalRecebido = recebidoSaidas + divida + (mensalidadesTotal - mensalistaExtraTotal) + antecipadosTotal + produtosTotal;
   const esperadoCaixa = Number(caixa.valor_abertura || 0) + dinheiro + reforcosTotal - sangriasTotal;
   const diferenca = caixa.valor_fechamento != null ? Number(caixa.valor_fechamento) - esperadoCaixa : null;
 
@@ -230,11 +244,17 @@ export async function carregarRelatorioCaixa(caixa) {
         divida: dividaQuitada - dividaGerada,
       };
     }),
-    ...(mensPagtos || []).map((p) => ({
-      id: `mens-${p.id}`, quando: new Date(p.created_at), tipo: 'Mensalidade',
-      descricao: p.mensalistas?.razao || '—', forma: descForma[p.forma_pagamento] || p.forma_pagamento,
-      valor: Number(p.valor_pago || 0), divida: null,
-    })),
+    ...(mensPagtos || []).map((p) => {
+      const extra = Number(p.valor_extra || 0);
+      return {
+        id: `mens-${p.id}`, quando: new Date(p.created_at), tipo: 'Mensalidade',
+        descricao: p.mensalistas?.razao || '—', forma: descForma[p.forma_pagamento] || p.forma_pagamento,
+        // Igual a uma saída: tira a dívida de avulso embutida (valor_extra) do
+        // valor da mensalidade em si — ela vai na coluna "divida".
+        valor: Number(p.valor_pago || 0) - extra,
+        divida: extra || null,
+      };
+    }),
     ...(antecipadosEntrada || []).map((p) => ({
       id: `ant-${p.id}`, quando: new Date(p.created_at), tipo: 'Antecipado',
       descricao: p.movimentos?.placa ? `Entrada ${p.movimentos.placa}` : 'Entrada de veículo',

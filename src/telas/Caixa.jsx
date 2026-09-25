@@ -38,7 +38,10 @@ export default function Caixa({ perfil }) {
       supabase.from('sangrias').select('id,valor,motivo,tipo,created_at').eq('caixa_id', c.id),
       supabase.from('formas_pagamento').select('codigo,descricao,eh_dinheiro,eh_devedor'),
       // Mensalidades recebidas neste turno (Mensalistas → Receber).
-      supabase.from('mensalista_pagamentos').select('id,valor_pago,forma_pagamento,created_at,mensalistas(razao)').eq('caixa_id', c.id),
+      // valor_extra: parte deste pagamento que é dívida de avulso já cobrada
+      // antes (ver Pátio → Devedor → "Mensalista", 0057_mensalista_extras.sql)
+      // — mesmo raciocínio de movimentos.valor_dev, usado no extrato abaixo.
+      supabase.from('mensalista_pagamentos').select('id,valor_pago,valor_extra,forma_pagamento,created_at,mensalistas(razao)').eq('caixa_id', c.id),
       // Valores antecipados recebidos na ENTRADA neste turno (ver 0039_valor_antecipado.sql)
       // — ligados direto pelo próprio caixa_id do pagamento, não pelo do movimento
       // (que só é gravado na saída, podendo ser um turno diferente).
@@ -110,13 +113,20 @@ export default function Caixa({ perfil }) {
     // verdade agora, mas não é receita nova (já foi Faturado lá atrás).
     const dividaAvulsaTotal = (dividasPagas || []).reduce((s, p) => s + Number(p.valor || 0), 0);
     total += dividaAvulsaTotal;
+    // Parte de mensalidades recebidas neste turno que é dívida de avulso já
+    // cobrada antes (valor_extra — ver query acima) — mesma natureza de
+    // dividaAvulsaTotal, só que quitada dentro do pagamento de mensalidade em
+    // vez de um "Receber dívida" avulso. Já está em `mensalidades` (Total do
+    // turno soma cheio), só falta contar aqui pra não sumir da "Dívida (turno)".
+    const mensalistaExtraTotal = (mensPagtos || []).reduce((s, p) => s + Number(p.valor_extra || 0), 0);
     // "Dívida (turno)": negativo quando este turno GEROU dívida nova (saiu do
     // Total do turno, mas ainda é dinheiro que vai entrar um dia); positivo
     // quando este turno QUITOU dívida de um turno anterior — embutida numa
-    // saída nova ou avulsa (⋮ → Receber dívida) — entrou no Total do turno de
-    // agora, mas não é receita nova nenhuma. Soma zero ao longo do tempo pra
-    // cada dívida que nasce e morre — só mostra o saldo do turno.
-    const divida = dividaAnteriorTotal + dividaAvulsaTotal - dividaGeradaTotal;
+    // saída nova, avulsa (⋮ → Receber dívida) ou numa mensalidade (⋮ →
+    // Mensalistas → Receber) — entrou no Total do turno de agora, mas não é
+    // receita nova nenhuma. Soma zero ao longo do tempo pra cada dívida que
+    // nasce e morre — só mostra o saldo do turno.
+    const divida = dividaAnteriorTotal + dividaAvulsaTotal + mensalistaExtraTotal - dividaGeradaTotal;
     const mensalidades = (mensPagtos || []).reduce((s, p) => s + Number(p.valor_pago || 0), 0);
     const dinheiroMensalidades = (mensPagtos || [])
       .filter((p) => dinheiroCods.has(p.forma_pagamento))
@@ -164,11 +174,17 @@ export default function Caixa({ perfil }) {
           divida: dividaQuitada - dividaGerada,
         };
       }),
-      ...(mensPagtos || []).map((p) => ({
-        id: `mens-${p.id}`, quando: new Date(p.created_at), tipo: 'Mensalidade',
-        descricao: p.mensalistas?.razao || '—', forma: descForma[p.forma_pagamento] || p.forma_pagamento,
-        valor: Number(p.valor_pago || 0), divida: null,
-      })),
+      ...(mensPagtos || []).map((p) => {
+        const extra = Number(p.valor_extra || 0);
+        return {
+          id: `mens-${p.id}`, quando: new Date(p.created_at), tipo: 'Mensalidade',
+          descricao: p.mensalistas?.razao || '—', forma: descForma[p.forma_pagamento] || p.forma_pagamento,
+          // Igual a uma saída: tira a dívida de avulso embutida (valor_extra)
+          // do valor da mensalidade em si — ela vai na coluna "Dívida".
+          valor: Number(p.valor_pago || 0) - extra,
+          divida: extra || null,
+        };
+      }),
       ...(antecipadosEntrada || []).map((p) => ({
         id: `ant-${p.id}`, quando: new Date(p.created_at), tipo: 'Antecipado',
         descricao: p.movimentos?.placa ? `Entrada ${p.movimentos.placa}` : 'Entrada de veículo',
