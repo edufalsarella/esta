@@ -13,11 +13,22 @@ import CidadeBusca from './CidadeBusca.jsx';
  * IBGE) pra `salvar` gravar os três — marque os dois com `oculto: true` pra
  * eles não ganharem sua própria linha no formulário (o widget já preenche os
  * três juntos). Mesmo padrão já usado à mão em Configuracoes/Fiscal/Mensalistas.
+ * `buscaEm`: campos que o caixa de busca filtra (ex.: ['codigo', 'nome']) —
+ * some sozinha quando a lista é pequena o bastante pra não precisar (ver
+ * MIN_LINHAS_BUSCA). Sem `buscaEm`, nenhuma busca aparece.
+ * `ordenarPor`: [{ campo, rotulo }] — mostra um seletor "Ordenar por" do
+ * lado da busca, pra escolher a coluna sem precisar de outra ida ao banco (a
+ * ordenação, feita em JS, troca na hora). Primeiro item é o padrão. Sem
+ * `ordenarPor`, a lista fica só na ordem que veio do banco (`ordem`/`ascending`).
  */
-export default function Crud({ perfil, titulo, subtitulo, tabela, colunas, ordem = 'created_at', ascending = true, aoMudar, exclusivos = [] }) {
+const MIN_LINHAS_BUSCA = 8;
+
+export default function Crud({ perfil, titulo, subtitulo, tabela, colunas, ordem = 'created_at', ascending = true, aoMudar, exclusivos = [], buscaEm, ordenarPor }) {
   const [linhas, setLinhas] = useState([]);
   const [erro, setErro] = useState('');
   const [editando, setEditando] = useState(null); // objeto (edição) ou {} (novo)
+  const [busca, setBusca] = useState('');
+  const [campoOrdem, setCampoOrdem] = useState(ordenarPor?.[0]?.campo || null);
 
   async function carregar() {
     const { data, error } = await supabase.from(tabela).select('*').order(ordem, { ascending });
@@ -51,6 +62,14 @@ export default function Crud({ perfil, titulo, subtitulo, tabela, colunas, ordem
   }
 
   const colsTabela = colunas.filter((c) => c.naTabela !== false);
+  const alvoBusca = busca.trim().toLowerCase();
+  const linhasFiltradas = alvoBusca && buscaEm?.length
+    ? linhas.filter((r) => buscaEm.some((campo) => String(r[campo] ?? '').toLowerCase().includes(alvoBusca)))
+    : linhas;
+  const linhasOrdenadas = campoOrdem
+    ? [...linhasFiltradas].sort((a, b) => String(a[campoOrdem] ?? '').localeCompare(String(b[campoOrdem] ?? ''), 'pt-BR'))
+    : linhasFiltradas;
+  const mostraFerramentas = (buscaEm?.length && linhas.length > MIN_LINHAS_BUSCA) || ordenarPor?.length > 1;
 
   return (
     <div className="card">
@@ -62,13 +81,30 @@ export default function Crud({ perfil, titulo, subtitulo, tabela, colunas, ordem
         <button className="btn-primary" onClick={() => setEditando({})}>+ Novo</button>
       </div>
       {erro && <div className="aviso">{erro}</div>}
+      {mostraFerramentas && (
+        <div className="linha-form" style={{ marginBottom: 10 }}>
+          {buscaEm?.length && linhas.length > MIN_LINHAS_BUSCA && (
+            <div className="campo" style={{ maxWidth: 280 }}>
+              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar…" />
+            </div>
+          )}
+          {ordenarPor?.length > 1 && (
+            <div className="campo" style={{ maxWidth: 200 }}>
+              <label style={{ fontSize: 11 }}>Ordenar por</label>
+              <select value={campoOrdem} onChange={(e) => setCampoOrdem(e.target.value)}>
+                {ordenarPor.map((o) => <option key={o.campo} value={o.campo}>{o.rotulo}</option>)}
+              </select>
+            </div>
+          )}
+        </div>
+      )}
       <div className="tabela-scroll">
         <table>
           <thead>
             <tr>{colsTabela.map((c) => <th key={c.campo}>{c.rotulo}</th>)}<th></th></tr>
           </thead>
           <tbody>
-            {linhas.map((r) => (
+            {linhasOrdenadas.map((r) => (
               <tr key={r.id}>
                 {colsTabela.map((c) => <td key={c.campo}>{formatar(r[c.campo], c)}</td>)}
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -77,7 +113,9 @@ export default function Crud({ perfil, titulo, subtitulo, tabela, colunas, ordem
                 </td>
               </tr>
             ))}
-            {linhas.length === 0 && <tr><td colSpan={colsTabela.length + 1} className="suave">Nenhum registro.</td></tr>}
+            {linhasOrdenadas.length === 0 && (
+              <tr><td colSpan={colsTabela.length + 1} className="suave">{linhas.length === 0 ? 'Nenhum registro.' : 'Nada encontrado pra essa busca.'}</td></tr>
+            )}
           </tbody>
         </table>
       </div>

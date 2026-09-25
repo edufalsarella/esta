@@ -196,6 +196,8 @@ export function Produtos({ perfil }) {
 export function Modelos({ perfil }) {
   return <Crud perfil={perfil} titulo="Modelos de veículo" tabela="modelos_veiculo" ordem="codigo"
     subtitulo="Catálogo de modelos e a tabela de preço padrão de cada um."
+    buscaEm={['codigo', 'nome']}
+    ordenarPor={[{ campo: 'codigo', rotulo: 'Código' }, { campo: 'nome', rotulo: 'Modelo' }]}
     colunas={[
       { campo: 'codigo', rotulo: 'Código', obrigatorio: true },
       { campo: 'nome', rotulo: 'Modelo', obrigatorio: true },
