@@ -878,8 +878,21 @@ export default function Patio({ perfil }) {
    */
   function calcularResultadoSaida(mov, convenioCodigo, servicosSelecionados, bonusFidelidade = 0, horaConvenio) {
     if (MENSALISTA.has(mov.tipo_mens)) {
-      // Mensalista: já paga a mensalidade; saída sem cobrança nesta fase.
-      return { valor: 0, valorProporcional: 0, valorConvenio: 0, pontos: 0, mensalista: true, tempoDecorrido: 0 };
+      // Mensalista: a ESTADIA já está na mensalidade, sem cobrança — mas um
+      // serviço marcado nesta saída (ex.: lavagem) continua sendo cobrado à
+      // parte, igual valeria pra um avulso. Não passa pelo motor de
+      // tarifação (calcularTarifa também cobraria o tempo, que aqui tem que
+      // ficar sempre zerado) — soma na mão o mesmo valor que o motor usaria:
+      // valorInformado quando teve (ver servicoPedeValor), senão o valor
+      // fixo da tabela do serviço (valorServico).
+      const valorServicos = (servicosSelecionados || []).reduce((t, s) =>
+        t + Number(s.valorInformado ?? tabelas[s.tabela_tipo]?.valorServico ?? 0), 0);
+      const pontosServicos = (servicosSelecionados || []).reduce((t, s) =>
+        t + Number(tabelas[s.tabela_tipo]?.qtePontos || 0), 0);
+      return {
+        valor: valorServicos, valorProporcional: valorServicos, valorConvenio: 0,
+        pontos: pontosServicos, mensalista: true, tempoDecorrido: 0,
+      };
     }
 
     // Serviços com valor já informado ao marcar (ver servicoPedeValor) somam
@@ -1022,10 +1035,12 @@ export default function Patio({ perfil }) {
       // horário contratado — é exatamente isso que faz calcularResultadoSaida
       // devolver mensalista:true; quem caiu pra avulso por vencimento/vaga/
       // restrição tem mensalista:false e continua parando aqui, é cobrança
-      // real). Sem valor a cobrar e sem bônus a oferecer (avaliarBonus já
-      // ignora esse caso) — não tem por que parar pedindo confirmação, mesmo
-      // raciocínio da entrada automática dele.
-      if (resultado.mensalista) {
+      // real) SEM nenhum serviço cobrado nesta saída: não tem por que parar
+      // pedindo confirmação, mesmo raciocínio da entrada automática dele. Com
+      // serviço (ex.: lavagem) a estadia continua de graça, mas o serviço tem
+      // que ser cobrado — cai no card normal pra escolher forma de pagamento,
+      // igual um avulso qualquer (ver mensalista no card mais abaixo).
+      if (resultado.mensalista && resultado.valor === 0) {
         await confirmarSaida(null, { mov, convenioCodigo, servicosSelecionados, resultado, bonusAplicado: null, pagamentos });
         return;
       }
@@ -1450,7 +1465,7 @@ export default function Patio({ perfil }) {
       ? Number(bonusDisponivel?.pontosProjetados || 0) - Number(bonusAplicado.pontos_necessarios || 0)
       : null;
 
-    const formaTexto = resultado.mensalista ? 'Mensalista/hóspede'
+    const formaTexto = resultado.mensalista && resultado.valor === 0 ? 'Mensalista/hóspede'
       : (pagos.map((p) => formas.find((f) => f.codigo === p.forma)?.descricao || p.forma).join(' + ') || '—');
     const ticketSaida = comModelo('saida', {
       titulo: 'Ticket de saída',
@@ -2270,7 +2285,10 @@ export default function Patio({ perfil }) {
               </p>
             )}
             {saindo.resultado.mensalista ? (
-              <p className="suave">Mensalista/hóspede — sem cobrança na saída (mensalidade paga à parte).</p>
+              <p className="suave">
+                Mensalista/hóspede — estadia sem cobrança (mensalidade paga à parte).
+                {saindo.resultado.valor > 0 && ' Serviço marcado nesta saída é cobrado à parte, abaixo.'}
+              </p>
             ) : (
               <>
                 {/* A tabela usada é informação de diagnóstico: com Tabela alt.
@@ -2338,7 +2356,7 @@ export default function Patio({ perfil }) {
               </p>
             )}
 
-            {!saindo.resultado.mensalista && saindo.resultado.valor > 0 && (
+            {saindo.resultado.valor > 0 && (
               <div style={{ margin: '12px 0' }}>
                 <label className="suave">Pagamento</label>
                 {saindo.pagamentos.map((p, i) => (
