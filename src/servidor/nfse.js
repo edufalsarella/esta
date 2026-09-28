@@ -66,6 +66,33 @@ export function extrairChaveECertificado(pfxBuffer, senha) {
 }
 
 /**
+ * Agente HTTPS pra mTLS a partir do .pfx. Não usa `pfx:` direto: o OpenSSL 3
+ * do Node moderno recusa .pfx com criptografia antiga (RC2-40/3DES, comum em
+ * A1 emitido por AC brasileira) com "Unsupported PKCS12 PFX data" — o forge
+ * (mesmo usado na assinatura) lê esses arquivos sem problema, então a chave e
+ * a cadeia saem dele em PEM. Titular primeiro, depois as ACs.
+ */
+export function criarAgenteMtls(pfxBuffer, senha) {
+  const asn1 = forge.asn1.fromDer(forge.util.createBuffer(pfxBuffer.toString('binary')));
+  const p12 = forge.pkcs12.pkcs12FromAsn1(asn1, false, senha);
+  let chave = null;
+  const certificados = [];
+  for (const safeContents of p12.safeContents) {
+    for (const safeBag of safeContents.safeBags) {
+      if (safeBag.type === forge.pki.oids.pkcs8ShroudedKeyBag || safeBag.type === forge.pki.oids.keyBag) chave = safeBag.key;
+      else if (safeBag.type === forge.pki.oids.certBag) certificados.push(safeBag.cert);
+    }
+  }
+  if (!chave || certificados.length === 0) throw new Error('Não achei chave privada e certificado no .pfx (senha errada ou arquivo inválido).');
+  const titular = certificados.find((c) => c.publicKey.n && c.publicKey.n.equals(chave.n)) || certificados[0];
+  const ordenados = [titular, ...certificados.filter((c) => c !== titular)];
+  return new https.Agent({
+    key: forge.pki.privateKeyToPem(chave),
+    cert: ordenados.map((c) => forge.pki.certificateToPem(c)).join(''),
+  });
+}
+
+/**
  * Assina, com XMLDSig, o elemento identificado por `localName` (casado pelo
  * atributo Id dele): assinatura enveloped, canonicalização C14N padrão,
  * RSA-SHA1/SHA1 — é o que a documentação do padrão de assinatura das notas
@@ -239,7 +266,7 @@ const URL_NACIONAL_POR_AMBIENTE = {
 export function enviarDps({ xmlAssinado, ambiente, pfxBuffer, senha, padrao }) {
   const urls = padrao === 'padrao_nacional' ? URL_NACIONAL_POR_AMBIENTE : URL_POR_AMBIENTE;
   const url = urls[ambiente] || urls.homologacao;
-  const agent = new https.Agent({ pfx: pfxBuffer, passphrase: senha });
+  const agent = criarAgenteMtls(pfxBuffer, senha);
   const corpo = JSON.stringify({ dpsXmlGZipB64: gzipBase64(xmlAssinado) });
 
   return new Promise((resolve, reject) => {
@@ -285,7 +312,7 @@ export function envelopeSoapAbrasf(metodo, xmlNegocio) {
  */
 export function enviarAbrasf({ metodo, xmlNegocio, envelopePronto, ambiente, pfxBuffer, senha }) {
   const url = URL_ABRASF_POR_AMBIENTE[ambiente] || URL_ABRASF_POR_AMBIENTE.homologacao;
-  const agent = new https.Agent({ pfx: pfxBuffer, passphrase: senha });
+  const agent = criarAgenteMtls(pfxBuffer, senha);
   // `envelopePronto` é pra quando a assinatura precisou ser feita já dentro do
   // envelope (consulta — ver assinarConsultaAbrasf): embrulhar de novo aqui
   // mudaria os bytes assinados.
