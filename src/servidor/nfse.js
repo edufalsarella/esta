@@ -222,13 +222,23 @@ const URL_POR_AMBIENTE = {
   producao: 'https://novanfse.campinas.sp.gov.br/notafiscal-ws/api/adn/dps',
 };
 
+// Padrão Nacional "puro": API SefinNacional do governo federal (mesmo corpo
+// {dpsXmlGZipB64} e mesma resposta síncrona do endpoint de Campinas acima —
+// é o mesmo Sistema Nacional NFS-e, só o host muda).
+const URL_NACIONAL_POR_AMBIENTE = {
+  homologacao: 'https://sefin.producaorestrita.nfse.gov.br/SefinNacional/nfse',
+  producao: 'https://sefin.nfse.gov.br/SefinNacional/nfse',
+};
+
 /**
  * Envia o DPS já assinado pra ADN via mTLS (o certificado autentica a própria
  * conexão HTTPS — não é um token). Resposta é síncrona: já vem com a NFS-e
- * autorizada, ou o erro/rejeição.
+ * autorizada, ou o erro/rejeição. `padrao: 'padrao_nacional'` usa o endpoint
+ * federal; qualquer outro valor cai no de Campinas (IMA).
  */
-export function enviarDps({ xmlAssinado, ambiente, pfxBuffer, senha }) {
-  const url = URL_POR_AMBIENTE[ambiente] || URL_POR_AMBIENTE.homologacao;
+export function enviarDps({ xmlAssinado, ambiente, pfxBuffer, senha, padrao }) {
+  const urls = padrao === 'padrao_nacional' ? URL_NACIONAL_POR_AMBIENTE : URL_POR_AMBIENTE;
+  const url = urls[ambiente] || urls.homologacao;
   const agent = new https.Agent({ pfx: pfxBuffer, passphrase: senha });
   const corpo = JSON.stringify({ dpsXmlGZipB64: gzipBase64(xmlAssinado) });
 

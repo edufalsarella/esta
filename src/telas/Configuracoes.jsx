@@ -716,8 +716,9 @@ export default function Configuracoes({ perfil }) {
                   Hoje Campinas emite em produção pelo ABRASF — é o que deve ficar
                   selecionado (campos específicos dele logo abaixo). Padrão Nacional
                   Campinas o esta também sabe gerar/enviar, mas ainda não entrou em
-                  operação na prefeitura. Padrão Nacional (ADN compartilhado) é pra
-                  quando Campinas migrar pra lá — sem previsão, envio bloqueado.
+                  operação na prefeitura. Padrão Nacional envia o mesmo DPS direto pro
+                  sistema do governo federal (sefin.nfse.gov.br; em homologação,
+                  sefin.producaorestrita.nfse.gov.br) — pra prefeituras já integradas a ele.
                 </span>
               </div>
               <div className="campo" style={{ maxWidth: 300 }}>

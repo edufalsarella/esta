@@ -55,14 +55,6 @@ export default async function handler(req, res) {
   const ambiente = filial.config?.nfse?.ambiente === 'producao' ? 'producao' : 'homologacao';
   const padrao = filial.config?.nfse?.padrao || 'padrao_nacional_campinas';
 
-  // Padrão Nacional (ADN compartilhado) ainda não tem endpoint confirmado
-  // pra Campinas (ver Configurações → Fiscal) — Padrão Nacional Campinas e
-  // ABRASF já estão implementados.
-  if (padrao === 'padrao_nacional') {
-    res.status(501).json({ erro: 'Envio por Padrão Nacional (ADN compartilhado) ainda não está implementado no esta — troque pra "Padrão Nacional Campinas" ou "ABRASF" em Configurações → Fiscal.' });
-    return;
-  }
-
   try {
     const { chavePem, certPem } = extrairChaveECertificado(pfxBuffer, senha);
 
@@ -105,7 +97,7 @@ export default async function handler(req, res) {
     const xml = gerarXmlDPS({ nota, filial });
     const xmlAssinado = assinarXmlDps(xml, { chavePem, certPem });
 
-    const resposta = await enviarDps({ xmlAssinado, ambiente, pfxBuffer, senha });
+    const resposta = await enviarDps({ xmlAssinado, ambiente, pfxBuffer, senha, padrao });
     let corpo;
     try { corpo = JSON.parse(resposta.corpo); } catch { corpo = { bruto: resposta.corpo }; }
 
