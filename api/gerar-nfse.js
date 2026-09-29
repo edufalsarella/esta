@@ -9,6 +9,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { gerarXmlDPS, gerarXmlAbrasfLoteRps, parseAbrasfEnvioResposta, aliquotaIssConfigurada } from '../src/lib/fiscal.js';
 import { extrairChaveECertificado, assinarXmlDps, enviarDps, numeroNfseDoRetorno, assinarLoteAbrasf, enviarAbrasf, autoverificarAssinatura, carregarCertificadoDaFilial } from '../src/servidor/nfse.js';
+import { validarXmlDps } from '../src/servidor/validarDps.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ erro: 'Método não suportado.' }); return; }
@@ -106,6 +107,25 @@ export default async function handler(req, res) {
     // fiscal atual e um dhEmi fresco, mesmo que a nota já tivesse um XML antigo.
     const xml = gerarXmlDPS({ nota, filial });
     const xmlAssinado = assinarXmlDps(xml, { chavePem, certPem });
+
+    // A prefeitura valida pelo XSD oficial e só devolve um L9999 genérico —
+    // valida aqui antes, com o campo exato e onde corrigir, sem gastar envio.
+    // Se o próprio validador falhar (ex.: schema não empacotado), não trava o
+    // envio — a prefeitura continua validando do lado dela.
+    let validacao = { valido: true, erros: [] };
+    try {
+      validacao = await validarXmlDps(xmlAssinado);
+    } catch (e) {
+      console.error('validarXmlDps falhou, enviando sem validação prévia:', e);
+    }
+    if (!validacao.valido) {
+      await supabase.from('notas_fiscais').update({
+        status: 'erro', xml: xmlAssinado,
+        retorno: `XML fora do schema oficial (NFS-e Nacional v1.01) — NÃO foi enviado à prefeitura. Corrija e reenvie:\n${validacao.erros.join('\n')}`,
+      }).eq('id', nota.id);
+      res.status(200).json({ ok: false, status: 'erro', erro: `XML fora do schema oficial, não foi enviado: ${validacao.erros[0] || ''} (veja o retorno na linha da nota).`, ambiente });
+      return;
+    }
 
     const resposta = await enviarDps({ xmlAssinado, ambiente, pfxBuffer, senha, padrao });
     let corpo;

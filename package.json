@@ -20,6 +20,7 @@
     "react-router-dom": "^6.30.4",
     "ws": "^8.22.0",
     "xml-crypto": "^6.1.2",
+    "xmllint-wasm": "^5.3.0",
     "xpath": "^0.0.33"
   },
   "devDependencies": {
