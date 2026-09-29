@@ -58,8 +58,8 @@ export function gerarXmlDPS({ nota, filial }) {
     `      <xNome>${esc(filial.razao_social)}</xNome>`,
     '      <end>',
     '        <endNac>',
+    // TCEnderNac do XSD v1.01 só tem cMun + CEP — UF aqui é recusado (L9999).
     `          <cMun>${esc(municipio)}</cMun>`,
-    `          <UF>${esc(filial.uf || '')}</UF>`,
     `          <CEP>${esc(pad(filial.cep, 8))}</CEP>`,
     '        </endNac>',
     `        <xLgr>${esc(filial.endereco || '')}</xLgr>`,
