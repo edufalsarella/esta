@@ -7,7 +7,7 @@
 //   VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY   (já configuradas pro app)
 //   SUPABASE_SERVICE_ROLE_KEY                    (pra ler fiscal_certificados — ver certificado-fiscal.js)
 import { createClient } from '@supabase/supabase-js';
-import { gerarXmlDPS, gerarXmlAbrasfLoteRps, parseAbrasfEnvioResposta } from '../src/lib/fiscal.js';
+import { gerarXmlDPS, gerarXmlAbrasfLoteRps, parseAbrasfEnvioResposta, aliquotaIssConfigurada } from '../src/lib/fiscal.js';
 import { extrairChaveECertificado, assinarXmlDps, enviarDps, numeroNfseDoRetorno, assinarLoteAbrasf, enviarAbrasf, autoverificarAssinatura, carregarCertificadoDaFilial } from '../src/servidor/nfse.js';
 
 export default async function handler(req, res) {
@@ -54,6 +54,16 @@ export default async function handler(req, res) {
 
   const ambiente = filial.config?.nfse?.ambiente === 'producao' ? 'producao' : 'homologacao';
   const padrao = filial.config?.nfse?.padrao || 'padrao_nacional_campinas';
+
+  // Alíquota da configuração ATUAL, não a de quando a nota foi gerada: se a
+  // prefeitura recusou por alíquota errada, o cliente corrige em
+  // Configurações → Fiscal e o reenvio já sai certo.
+  const aliquotaIss = aliquotaIssConfigurada(filial);
+  if (Number(nota.aliquota_iss) !== aliquotaIss) {
+    nota.aliquota_iss = aliquotaIss;
+    nota.valor_iss = Number((Number(nota.valor) * aliquotaIss / 100).toFixed(2));
+    await supabase.from('notas_fiscais').update({ aliquota_iss: nota.aliquota_iss, valor_iss: nota.valor_iss }).eq('id', nota.id);
+  }
 
   try {
     const { chavePem, certPem } = extrairChaveECertificado(pfxBuffer, senha);

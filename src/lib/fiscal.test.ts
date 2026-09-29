@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseAbrasfConsultaResposta, parseAbrasfEnvioResposta, gerarXmlAbrasfLoteRps, codTribMunicipalXml } from './fiscal.js';
+import { parseAbrasfConsultaResposta, parseAbrasfEnvioResposta, gerarXmlAbrasfLoteRps, codTribMunicipalXml, aliquotaIssConfigurada } from './fiscal.js';
 
 // Respostas reais da IMA/Campinas (homologação), capturadas durante a
 // integração — servem de referência do formato que a prefeitura devolve.
@@ -98,4 +98,12 @@ test('codTribMunicipalXml: 9 dígitos de Campinas (nacional + municipal) viram o
   assert.equal(codTribMunicipalXml({ codTribMunicipal: '001' }), '001');
   assert.equal(codTribMunicipalXml({ codTribMunicipal: '' }), '');
   assert.equal(codTribMunicipalXml({}), '');
+});
+
+test('aliquotaIssConfigurada: ABRASF usa o campo próprio; os padrões nacionais usam perc_iss', () => {
+  assert.equal(aliquotaIssConfigurada({ config: { nfse: { perc_iss: '5' } } }), 5);
+  assert.equal(aliquotaIssConfigurada({ config: { nfse: { padrao: 'padrao_nacional', perc_iss: 2 } } }), 2);
+  assert.equal(aliquotaIssConfigurada({ config: { nfse: { padrao: 'abrasf', perc_iss: 2, abrasf: { percIss: 3 } } } }), 3);
+  assert.equal(aliquotaIssConfigurada({ config: { nfse: { padrao: 'abrasf', perc_iss: 2 } } }), 2);
+  assert.equal(aliquotaIssConfigurada({}), 0);
 });

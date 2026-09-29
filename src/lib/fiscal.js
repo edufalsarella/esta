@@ -42,6 +42,19 @@ export function codTribMunicipalXml(cfg) {
   return d.length === 9 ? d.slice(-3) : d;
 }
 
+/**
+ * % de ISS configurado agora pra filial (ABRASF tem campo próprio). Usado ao
+ * gerar a nota e de novo a cada envio/reenvio — a alíquota vem do contador e
+ * a prefeitura recusa se estiver errada; corrigir a configuração tem que
+ * valer pro reenvio das notas já geradas.
+ */
+export function aliquotaIssConfigurada(filial) {
+  const cfg = filial.config?.nfse || {};
+  return (cfg.padrao || 'padrao_nacional_campinas') === 'abrasf'
+    ? Number(cfg.abrasf?.percIss ?? cfg.perc_iss ?? 0)
+    : Number(cfg.perc_iss || 0);
+}
+
 /** Monta o XML do DPS (Declaração de Prestação de Serviço), Padrão Nacional v1.01. */
 export function gerarXmlDPS({ nota, filial }) {
   const cfg = filial.config?.nfse || {};
