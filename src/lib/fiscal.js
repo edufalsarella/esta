@@ -73,13 +73,16 @@ export function gerarXmlDPS({ nota, filial }) {
     '        <regEspTrib>0</regEspTrib>',
     '      </regTrib>',
     '    </prest>',
-    '    <toma>',
-    // Identificação é uma escolha obrigatória: CNPJ | CPF | NIF | cNaoNIF.
-    // Sem documento (cliente avulso, comum em estacionamento) usa cNaoNIF=2
-    // ("não exigibilidade do NIF") em vez de mandar CPF/CNPJ vazio.
-    ...(doc ? [`      <${tagDoc}>${esc(doc)}</${tagDoc}>`] : ['      <cNaoNIF>2</cNaoNIF>']),
-    `      <xNome>${esc(tomador.nome || 'CONSUMIDOR')}</xNome>`,
-    '    </toma>',
+    // Consumidor sem CPF/CNPJ (avulso, comum em estacionamento): sem o grupo
+    // toma (opcional no XSD). cNaoNIF é o motivo de não ter NIF, documento de
+    // ESTRANGEIRO — com ele a IMA tratava o cliente como do exterior e pedia o
+    // estado/província do endereço lá fora ("L9999 Estado deve ser informado").
+    ...(doc ? [
+      '    <toma>',
+      `      <${tagDoc}>${esc(doc)}</${tagDoc}>`,
+      `      <xNome>${esc(tomador.nome || 'CONSUMIDOR')}</xNome>`,
+      '    </toma>',
+    ] : []),
     '    <serv>',
     '      <locPrest>',
     `        <cLocPrestacao>${esc(municipio)}</cLocPrestacao>`,
