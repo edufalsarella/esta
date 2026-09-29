@@ -32,6 +32,16 @@ function agoraISOComFuso() {
   return `${local.toISOString().slice(0, 19)}-03:00`;
 }
 
+/**
+ * cTribMun do XSD é o desdobramento municipal de 3 dígitos. Campinas mostra o
+ * código "municipal" com 9 (ex.: 110101001 = cTribNac 110101 + "001") — aceita
+ * os dois jeitos e manda só os 3 finais.
+ */
+export function codTribMunicipalXml(cfg) {
+  const d = String(cfg.codTribMunicipal || '').replace(/\D/g, '');
+  return d.length === 9 ? d.slice(-3) : d;
+}
+
 /** Monta o XML do DPS (Declaração de Prestação de Serviço), Padrão Nacional v1.01. */
 export function gerarXmlDPS({ nota, filial }) {
   const cfg = filial.config?.nfse || {};
@@ -84,7 +94,7 @@ export function gerarXmlDPS({ nota, filial }) {
     '      </locPrest>',
     '      <cServ>',
     `        <cTribNac>${esc(cfg.codTribNacional || '')}</cTribNac>`,
-    ...(cfg.codTribMunicipal ? [`        <cTribMun>${esc(cfg.codTribMunicipal)}</cTribMun>`] : []),
+    ...(codTribMunicipalXml(cfg) ? [`        <cTribMun>${esc(codTribMunicipalXml(cfg))}</cTribMun>`] : []),
     `        <xDescServ>${esc(nota.descricao || 'Estacionamento de veículo')}</xDescServ>`,
     // NBS 2.0 (Anexo B): 9 dígitos, sem os pontos da forma "1.0604.30.00".
     ...(cfg.codNBS ? [`        <cNBS>${esc(String(cfg.codNBS).replace(/\D/g, ''))}</cNBS>`] : []),

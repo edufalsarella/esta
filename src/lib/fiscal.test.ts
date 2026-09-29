@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseAbrasfConsultaResposta, parseAbrasfEnvioResposta, gerarXmlAbrasfLoteRps } from './fiscal.js';
+import { parseAbrasfConsultaResposta, parseAbrasfEnvioResposta, gerarXmlAbrasfLoteRps, codTribMunicipalXml } from './fiscal.js';
 
 // Respostas reais da IMA/Campinas (homologação), capturadas durante a
 // integração — servem de referência do formato que a prefeitura devolve.
@@ -91,4 +91,11 @@ test('gerarXmlAbrasfLoteRps: sem issRetido no tomador, usa o padrão da filial (
   const nota = { numero_rps: 7, competencia: '2026-08-15', valor: 50, tomador: { cpf_cnpj: '12345678900', nome: 'Fulano' } };
   const xml = gerarXmlAbrasfLoteRps({ nota, filial });
   assert.match(xml, /<IssRetido>1<\/IssRetido>/);
+});
+
+test('codTribMunicipalXml: 9 dígitos de Campinas (nacional + municipal) viram os 3 finais', () => {
+  assert.equal(codTribMunicipalXml({ codTribMunicipal: '110101001' }), '001');
+  assert.equal(codTribMunicipalXml({ codTribMunicipal: '001' }), '001');
+  assert.equal(codTribMunicipalXml({ codTribMunicipal: '' }), '');
+  assert.equal(codTribMunicipalXml({}), '');
 });

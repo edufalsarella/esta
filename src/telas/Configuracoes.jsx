@@ -683,14 +683,14 @@ export default function Configuracoes({ perfil }) {
               <div className="campo" style={{ maxWidth: 160 }}>
                 <label>Código de tributação municipal</label>
                 <input value={filial.config?.nfse?.codTribMunicipal || ''} disabled={!podeEditar}
-                  maxLength={3} onChange={(e) => setNfse('codTribMunicipal', e.target.value.replace(/\D/g, ''))} />
+                  maxLength={9} onChange={(e) => setNfse('codTribMunicipal', e.target.value.replace(/\D/g, ''))} />
                 <span className="suave" style={{ fontSize: 11 }}>
-                  3 dígitos (desdobramento municipal do código nacional), exigido por Campinas —
-                  confirme com o contador ou a prefeitura.
+                  Os 3 dígitos do desdobramento municipal, ou o código de 9 dígitos como a
+                  prefeitura mostra (ex.: 110101001) — no XML vão só os 3 finais.
                 </span>
-                {filial.config?.nfse?.codTribMunicipal && !/^\d{3}$/.test(filial.config.nfse.codTribMunicipal) && (
+                {filial.config?.nfse?.codTribMunicipal && !/^(\d{3}|\d{9})$/.test(filial.config.nfse.codTribMunicipal) && (
                   <span className="aviso" style={{ fontSize: 11 }}>
-                    Precisa ter exatamente 3 dígitos — com outro tamanho o DPS é recusado (L9999).
+                    Precisa ter 3 ou 9 dígitos — com outro tamanho o DPS é recusado (L9999).
                   </span>
                 )}
               </div>
