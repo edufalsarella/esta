@@ -86,6 +86,8 @@ export function gerarXmlDPS({ nota, filial }) {
     `        <cTribNac>${esc(cfg.codTribNacional || '')}</cTribNac>`,
     ...(cfg.codTribMunicipal ? [`        <cTribMun>${esc(cfg.codTribMunicipal)}</cTribMun>`] : []),
     `        <xDescServ>${esc(nota.descricao || 'Estacionamento de veículo')}</xDescServ>`,
+    // NBS 2.0 (Anexo B): 9 dígitos, sem os pontos da forma "1.0604.30.00".
+    ...(cfg.codNBS ? [`        <cNBS>${esc(String(cfg.codNBS).replace(/\D/g, ''))}</cNBS>`] : []),
     '      </cServ>',
     '    </serv>',
     '    <valores>',

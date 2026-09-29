@@ -694,6 +694,19 @@ export default function Configuracoes({ perfil }) {
                   </span>
                 )}
               </div>
+              <div className="campo" style={{ maxWidth: 180 }}>
+                <label>Código NBS</label>
+                <input value={filial.config?.nfse?.codNBS || ''} disabled={!podeEditar} placeholder="1.0604.30.00"
+                  maxLength={12} onChange={(e) => setNfse('codNBS', e.target.value)} />
+                <span className="suave" style={{ fontSize: 11 }}>
+                  Nomenclatura Brasileira de Serviços (9 dígitos; pode digitar com os pontos).
+                </span>
+                {filial.config?.nfse?.codNBS && filial.config.nfse.codNBS.replace(/\D/g, '').length !== 9 && (
+                  <span className="aviso" style={{ fontSize: 11 }}>
+                    Precisa ter 9 dígitos — com outro tamanho o DPS é recusado (L9999).
+                  </span>
+                )}
+              </div>
               <div className="campo" style={{ maxWidth: 120 }}>
                 <label>% ISS</label>
                 <input type="number" step="0.0001" min="0" value={filial.config?.nfse?.perc_iss ?? ''} disabled={!podeEditar}
