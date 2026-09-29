@@ -8,7 +8,7 @@
 //   SUPABASE_SERVICE_ROLE_KEY                    (pra ler fiscal_certificados — ver certificado-fiscal.js)
 import { createClient } from '@supabase/supabase-js';
 import { gerarXmlDPS, gerarXmlAbrasfLoteRps, parseAbrasfEnvioResposta } from '../src/lib/fiscal.js';
-import { extrairChaveECertificado, assinarXmlDps, enviarDps, assinarLoteAbrasf, enviarAbrasf, autoverificarAssinatura, carregarCertificadoDaFilial } from '../src/servidor/nfse.js';
+import { extrairChaveECertificado, assinarXmlDps, enviarDps, numeroNfseDoRetorno, assinarLoteAbrasf, enviarAbrasf, autoverificarAssinatura, carregarCertificadoDaFilial } from '../src/servidor/nfse.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ erro: 'Método não suportado.' }); return; }
@@ -102,12 +102,15 @@ export default async function handler(req, res) {
     try { corpo = JSON.parse(resposta.corpo); } catch { corpo = { bruto: resposta.corpo }; }
 
     if (resposta.status >= 200 && resposta.status < 300 && corpo.nfseXmlGZipB64) {
+      // A chave de acesso continua no retorno (JSON inteiro); o número
+      // (nNFSe) só existe dentro do XML autorizado.
+      const numeroNfse = numeroNfseDoRetorno(corpo);
       await supabase.from('notas_fiscais').update({
         status: 'autorizada', xml: xmlAssinado,
-        numero_nfse: corpo.chaveAcesso || null,
+        numero_nfse: numeroNfse || corpo.chaveAcesso || null,
         retorno: JSON.stringify(corpo),
       }).eq('id', nota.id);
-      res.status(200).json({ ok: true, status: 'autorizada', chaveAcesso: corpo.chaveAcesso, ambiente });
+      res.status(200).json({ ok: true, status: 'autorizada', numeroNfse, chaveAcesso: corpo.chaveAcesso, ambiente });
     } else {
       await supabase.from('notas_fiscais').update({
         status: 'erro', xml: xmlAssinado, retorno: JSON.stringify(corpo),

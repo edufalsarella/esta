@@ -77,7 +77,7 @@ export default function Fiscal({ perfil }) {
       const { httpOk, httpStatus, dados } = await chamarApi('/api/gerar-nfse', notaId);
       if (!httpOk) { setErro(dados.erro || `Falha ao enviar (${httpStatus}).`); return; }
       if (dados.ok && dados.status === 'enviada') setMsg(`Lote enviado — protocolo ${dados.protocolo}. Use "Consultar" pra saber se autorizou.`);
-      else if (dados.ok) setMsg(`NFS-e autorizada — chave de acesso ${dados.chaveAcesso || '—'} (ambiente: ${dados.ambiente}).`);
+      else if (dados.ok) setMsg(`NFS-e nº ${dados.numeroNfse || '—'} autorizada — chave de acesso ${dados.chaveAcesso || '—'} (ambiente: ${dados.ambiente}).`);
       else setErro(dados.erro || `Rejeitada pelo governo (ambiente: ${dados.ambiente}) — veja o retorno na linha da nota.`);
     } catch (e) {
       setErro(`Falha ao contatar o serviço de envio: ${e.message}`);

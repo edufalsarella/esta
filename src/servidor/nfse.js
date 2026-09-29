@@ -8,7 +8,7 @@ import forge from 'node-forge';
 import { SignedXml } from 'xml-crypto';
 import { DOMParser } from '@xmldom/xmldom';
 import xpath from 'xpath';
-import { gzipSync } from 'node:zlib';
+import { gzipSync, gunzipSync } from 'node:zlib';
 import https from 'node:https';
 import tls from 'node:tls';
 import { WebSocket, createWebSocketStream } from 'ws';
@@ -254,6 +254,19 @@ export function assinarConsultaAbrasf(xmlConsulta, { chavePem, certPem }) {
 /** Gzip + base64 — formato exigido pela ADN pra tudo (envio e retorno). */
 export function gzipBase64(texto) {
   return gzipSync(Buffer.from(texto, 'utf-8')).toString('base64');
+}
+
+/**
+ * Número da NFS-e (nNFSe) de dentro do XML autorizado que volta em
+ * nfseXmlGZipB64 — a resposta JSON em si só traz a chave de acesso.
+ */
+export function numeroNfseDoRetorno(corpo) {
+  try {
+    const xml = gunzipSync(Buffer.from(corpo.nfseXmlGZipB64, 'base64')).toString('utf-8');
+    return xml.match(/<nNFSe>(\d+)<\/nNFSe>/)?.[1] || null;
+  } catch {
+    return null;
+  }
 }
 
 // URLs do webservice próprio de Campinas (hospedado pela IMA), padrão
