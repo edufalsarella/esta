@@ -65,20 +65,9 @@ export function gerarXmlDPS({ nota, filial }) {
     '    <prest>',
     `      <CNPJ>${esc((filial.cnpj || '').replace(/\D/g, ''))}</CNPJ>`,
     `      <IM>${esc((filial.inscricao_mun || '').replace(/\D/g, ''))}</IM>`,
-    `      <xNome>${esc(filial.razao_social)}</xNome>`,
-    '      <end>',
-    '        <endNac>',
-    `          <cMun>${esc(municipio)}</cMun>`,
-    // TCEnderNac do XSD nacional v1.01 só tem cMun + CEP, mas a IMA/Campinas
-    // recusa sem o estado ("L9999 Estado deve ser informado") — vai só no
-    // Padrão Nacional Campinas, na posição do endereço do emitente (cMun, UF, CEP).
-    ...(cfg.padrao !== 'padrao_nacional' ? [`          <UF>${esc(filial.uf || '')}</UF>`] : []),
-    `          <CEP>${esc(pad(filial.cep, 8))}</CEP>`,
-    '        </endNac>',
-    `        <xLgr>${esc(filial.endereco || '')}</xLgr>`,
-    `        <nro>${esc(filial.numero || '')}</nro>`,
-    `        <xBairro>${esc(filial.bairro || '')}</xBairro>`,
-    '      </end>',
+    // Sem xNome nem end: com tpEmit=1 (o próprio prestador emite), as regras
+    // do Anexo I v1.01 proíbem os dois — o sistema usa o cadastro (CNC). Com
+    // o endereço, a IMA devolvia "L9999 Estado deve ser informado".
     '      <regTrib>',
     `        <opSimpNac>${esc(cfg.opSimpNac || '1')}</opSimpNac>`,
     '        <regEspTrib>0</regEspTrib>',
