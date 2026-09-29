@@ -37,6 +37,21 @@ export default async function handler(req, res) {
     return { host, ips, ...(await testarTcp(host)) };
   }));
 
+  // Com relay configurado (ver scripts/relay-nfse/relay.mjs), mostra também
+  // se o servidor do relay alcança o Serpro — é por ele que o Padrão Nacional sai.
+  let relay = null;
+  if (process.env.NFSE_RELAY_URL) {
+    try {
+      const resp = await fetch(`${process.env.NFSE_RELAY_URL.replace(/\/+$/, '')}/saude`, {
+        headers: { Authorization: `Bearer ${process.env.NFSE_RELAY_TOKEN || ''}` },
+        signal: AbortSignal.timeout(20000),
+      });
+      relay = resp.ok ? await resp.json() : { ok: false, erro: `HTTP ${resp.status}` };
+    } catch (e) {
+      relay = { ok: false, erro: e.message };
+    }
+  }
+
   res.setHeader('Cache-Control', 'no-store');
-  res.status(200).json({ regiao: process.env.VERCEL_REGION || null, ipSaida, conexoes });
+  res.status(200).json({ regiao: process.env.VERCEL_REGION || null, ipSaida, conexoes, relay });
 }

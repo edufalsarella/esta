@@ -10,6 +10,8 @@ import { DOMParser } from '@xmldom/xmldom';
 import xpath from 'xpath';
 import { gzipSync } from 'node:zlib';
 import https from 'node:https';
+import tls from 'node:tls';
+import { WebSocket, createWebSocketStream } from 'ws';
 
 /**
  * Busca o certificado (.pfx em base64 + senha) da filial, usando o client de
@@ -73,6 +75,10 @@ export function extrairChaveECertificado(pfxBuffer, senha) {
  * a cadeia saem dele em PEM. Titular primeiro, depois as ACs.
  */
 export function criarAgenteMtls(pfxBuffer, senha) {
+  return new https.Agent(pemMtls(pfxBuffer, senha));
+}
+
+function pemMtls(pfxBuffer, senha) {
   const asn1 = forge.asn1.fromDer(forge.util.createBuffer(pfxBuffer.toString('binary')));
   const p12 = forge.pkcs12.pkcs12FromAsn1(asn1, false, senha);
   let chave = null;
@@ -86,9 +92,28 @@ export function criarAgenteMtls(pfxBuffer, senha) {
   if (!chave || certificados.length === 0) throw new Error('Não achei chave privada e certificado no .pfx (senha errada ou arquivo inválido).');
   const titular = certificados.find((c) => c.publicKey.n && c.publicKey.n.equals(chave.n)) || certificados[0];
   const ordenados = [titular, ...certificados.filter((c) => c !== titular)];
-  return new https.Agent({
+  return {
     key: forge.pki.privateKeyToPem(chave),
     cert: ordenados.map((c) => forge.pki.certificateToPem(c)).join(''),
+  };
+}
+
+/**
+ * Abre um WebSocket até o relay (scripts/relay-nfse/relay.mjs), que liga o
+ * túnel numa conexão TCP com `host`:443. O TLS com o certificado do cliente é
+ * negociado daqui, por dentro do túnel — o relay só repassa bytes cifrados,
+ * sem ver certificado nem conteúdo da nota.
+ */
+export function abrirTunelRelay(host) {
+  const base = process.env.NFSE_RELAY_URL.replace(/^http/, 'ws').replace(/\/+$/, '');
+  const ws = new WebSocket(`${base}/tunel?host=${encodeURIComponent(host)}`, {
+    headers: { Authorization: `Bearer ${process.env.NFSE_RELAY_TOKEN || ''}` },
+    handshakeTimeout: 15000,
+  });
+  return new Promise((resolve, reject) => {
+    ws.once('open', () => resolve(createWebSocketStream(ws)));
+    ws.once('unexpected-response', (_req, resp) => reject(new Error(`Relay NFS-e recusou o túnel (HTTP ${resp.statusCode}) — NFSE_RELAY_TOKEN diferente do RELAY_TOKEN do relay, ou destino fora da lista permitida.`)));
+    ws.once('error', (e) => reject(new Error(`Relay NFS-e inacessível (${e.message}) — o servidor do relay está no ar?`)));
   });
 }
 
@@ -262,15 +287,30 @@ const URL_NACIONAL_POR_AMBIENTE = {
  * conexão HTTPS — não é um token). Resposta é síncrona: já vem com a NFS-e
  * autorizada, ou o erro/rejeição. `padrao: 'padrao_nacional'` usa o endpoint
  * federal; qualquer outro valor cai no de Campinas (IMA).
+ *
+ * O Serpro (sefin.*.nfse.gov.br) não aceita conexão vinda dos IPs da AWS onde
+ * a Vercel roda (timeout sempre, mesmo em gru1 — ver api/diagnostico-rede.js).
+ * Com NFSE_RELAY_URL configurada, o Padrão Nacional sai pelo relay; sem ela,
+ * vai direto. Campinas (IMA) e ABRASF sempre vão direto.
  */
-export function enviarDps({ xmlAssinado, ambiente, pfxBuffer, senha, padrao }) {
-  const urls = padrao === 'padrao_nacional' ? URL_NACIONAL_POR_AMBIENTE : URL_POR_AMBIENTE;
+export async function enviarDps({ xmlAssinado, ambiente, pfxBuffer, senha, padrao }) {
+  const nacional = padrao === 'padrao_nacional';
+  const urls = nacional ? URL_NACIONAL_POR_AMBIENTE : URL_POR_AMBIENTE;
   const url = urls[ambiente] || urls.homologacao;
-  const agent = criarAgenteMtls(pfxBuffer, senha);
   const corpo = JSON.stringify({ dpsXmlGZipB64: gzipBase64(xmlAssinado) });
 
+  let conexao;
+  if (nacional && process.env.NFSE_RELAY_URL) {
+    const host = new URL(url).hostname;
+    const tunel = await abrirTunelRelay(host);
+    const pem = pemMtls(pfxBuffer, senha);
+    conexao = { agent: false, createConnection: () => tls.connect({ socket: tunel, servername: host, ...pem }) };
+  } else {
+    conexao = { agent: criarAgenteMtls(pfxBuffer, senha) };
+  }
+
   return new Promise((resolve, reject) => {
-    const req = https.request(url, { method: 'POST', agent, headers: { 'Content-Type': 'application/json' } }, (resp) => {
+    const req = https.request(url, { method: 'POST', ...conexao, headers: { 'Content-Type': 'application/json' } }, (resp) => {
       let dados = '';
       resp.on('data', (chunk) => { dados += chunk; });
       resp.on('end', () => {
