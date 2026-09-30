@@ -7,7 +7,7 @@
 //   VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY   (já configuradas pro app)
 //   SUPABASE_SERVICE_ROLE_KEY                    (pra ler fiscal_certificados — ver certificado-fiscal.js)
 import { createClient } from '@supabase/supabase-js';
-import { gerarXmlDPS, gerarXmlAbrasfLoteRps, parseAbrasfEnvioResposta, aliquotaIssConfigurada, faltasEnderecoTomador } from '../src/lib/fiscal.js';
+import { gerarXmlDPS, gerarXmlAbrasfLoteRps, parseAbrasfEnvioResposta, aliquotaIssConfigurada, faltasEnderecoTomador, faltasConfigDps } from '../src/lib/fiscal.js';
 import { extrairChaveECertificado, assinarXmlDps, enviarDps, numeroNfseDoRetorno, assinarLoteAbrasf, enviarAbrasf, autoverificarAssinatura, carregarCertificadoDaFilial } from '../src/servidor/nfse.js';
 import { validarXmlDps } from '../src/servidor/validarDps.js';
 
@@ -103,6 +103,15 @@ export default async function handler(req, res) {
       return;
     }
 
+    const faltasConfig = faltasConfigDps(filial);
+    if (faltasConfig.length) {
+      const mensagem = `Configuração fiscal incompleta — falta: ${faltasConfig.join(', ')}. `
+        + 'Preencha em Configurações → Fiscal e reenvie. Não foi enviado à prefeitura.';
+      await supabase.from('notas_fiscais').update({ status: 'erro', retorno: mensagem }).eq('id', nota.id);
+      res.status(200).json({ ok: false, status: 'erro', erro: mensagem, ambiente });
+      return;
+    }
+
     // Tomador identificado sem endereço completo: Campinas recusa com CPF ou
     // CNPJ ("Estado deve ser informado"); a regra nacional exige com CNPJ.
     // Barra antes, dizendo o que falta, em vez do L9999.
@@ -155,8 +164,13 @@ export default async function handler(req, res) {
       }).eq('id', nota.id);
       res.status(200).json({ ok: true, status: 'autorizada', numeroNfse, chaveAcesso: corpo.chaveAcesso, ambiente });
     } else {
+      // Fora do Simples o grupo IBS/CBS já é obrigatório em 2026 e o app ainda
+      // não gera (Simples: só em 2027) — provável causa da recusa, fica anotado.
+      const obsIbsCbs = filial.config?.nfse?.opSimpNac === '1'
+        ? '\n\nObs.: empresa fora do Simples Nacional — o grupo IBS/CBS (Reforma Tributária), obrigatório para não optantes, ainda não é gerado pelo esta; a recusa pode ser por isso.'
+        : '';
       await supabase.from('notas_fiscais').update({
-        status: 'erro', xml: xmlAssinado, retorno: JSON.stringify(corpo),
+        status: 'erro', xml: xmlAssinado, retorno: JSON.stringify(corpo) + obsIbsCbs,
       }).eq('id', nota.id);
       res.status(200).json({ ok: false, status: 'erro', retorno: corpo, ambiente });
     }

@@ -107,3 +107,10 @@ test('aliquotaIssConfigurada: ABRASF usa o campo próprio; os padrões nacionais
   assert.equal(aliquotaIssConfigurada({ config: { nfse: { padrao: 'abrasf', perc_iss: 2 } } }), 2);
   assert.equal(aliquotaIssConfigurada({}), 0);
 });
+
+test('faltasConfigDps: NBS e regime tributário são obrigatórios no DPS', async () => {
+  const { faltasConfigDps } = await import('./fiscal.js');
+  assert.deepEqual(faltasConfigDps({ config: { nfse: { codNBS: '1.0604.30.00', opSimpNac: '3' } } }), []);
+  assert.deepEqual(faltasConfigDps({ config: { nfse: { opSimpNac: '3' } } }), ['Código NBS']);
+  assert.deepEqual(faltasConfigDps({}), ['Código NBS', 'Regime tributário (Simples Nacional)']);
+});

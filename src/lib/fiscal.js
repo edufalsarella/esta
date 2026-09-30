@@ -55,6 +55,19 @@ export function aliquotaIssConfigurada(filial) {
     : Number(cfg.perc_iss || 0);
 }
 
+/**
+ * Configuração que o XSD não pega: cNBS é omitido quando vazio (opcional no
+ * schema, obrigatório pra prefeitura) e opSimpNac vazio viraria "1 — não
+ * optante" sem ninguém perceber.
+ */
+export function faltasConfigDps(filial) {
+  const cfg = filial.config?.nfse || {};
+  const faltas = [];
+  if (!String(cfg.codNBS || '').replace(/\D/g, '')) faltas.push('Código NBS');
+  if (!cfg.opSimpNac) faltas.push('Regime tributário (Simples Nacional)');
+  return faltas;
+}
+
 const CAMPOS_ENDERECO_TOMADOR = [
   ['cep', 'CEP'], ['cod_ibge', 'cidade'], ['endereco', 'logradouro'], ['numero', 'número'], ['bairro', 'bairro'],
 ];

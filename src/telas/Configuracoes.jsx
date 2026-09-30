@@ -695,17 +695,24 @@ export default function Configuracoes({ perfil }) {
                 )}
               </div>
               <div className="campo" style={{ maxWidth: 180 }}>
-                <label>Código NBS</label>
+                <label>Código NBS *</label>
                 <input value={filial.config?.nfse?.codNBS || ''} disabled={!podeEditar} placeholder="1.0604.30.00"
                   maxLength={12} onChange={(e) => setNfse('codNBS', e.target.value)} />
                 <span className="suave" style={{ fontSize: 11 }}>
                   Nomenclatura Brasileira de Serviços (9 dígitos; pode digitar com os pontos).
+                  Obrigatório no DPS — estacionamento: 1.0604.30.00.
                 </span>
-                {filial.config?.nfse?.codNBS && filial.config.nfse.codNBS.replace(/\D/g, '').length !== 9 && (
-                  <span className="aviso" style={{ fontSize: 11 }}>
-                    Precisa ter 9 dígitos — com outro tamanho o DPS é recusado (L9999).
-                  </span>
-                )}
+                {filial.config?.nfse?.codNBS
+                  ? filial.config.nfse.codNBS.replace(/\D/g, '').length !== 9 && (
+                    <span className="aviso" style={{ fontSize: 11 }}>
+                      Precisa ter 9 dígitos — com outro tamanho o DPS é recusado (L9999).
+                    </span>
+                  )
+                  : (
+                    <span className="aviso" style={{ fontSize: 11 }}>
+                      Sem o código NBS o DPS não é enviado.
+                    </span>
+                  )}
               </div>
               <div className="campo" style={{ maxWidth: 120 }}>
                 <label>% ISS</label>
@@ -746,13 +753,20 @@ export default function Configuracoes({ perfil }) {
                   onChange={(e) => setNfse('opSimpNac', e.target.value)}>
                   <option value="">— confirme com o contador —</option>
                   <option value="1">Não optante</option>
-                  <option value="2">Optante — Microempresa municipal/ME/EPP</option>
-                  <option value="3">Optante — Outros</option>
+                  <option value="2">Optante — Microempreendedor Individual (MEI)</option>
+                  <option value="3">Optante — Microempresa ou Empresa de Pequeno Porte (ME/EPP)</option>
                 </select>
                 <span className="suave" style={{ fontSize: 11 }}>
                   Exigido pelo governo no DPS. Confirme com o contador antes de enviar — errar
                   isso classifica errado o regime tributário da empresa.
                 </span>
+                {filial.config?.nfse?.opSimpNac === '1' && (
+                  <span className="aviso" style={{ fontSize: 11 }}>
+                    Empresa fora do Simples: pela Reforma Tributária, o DPS precisa do grupo IBS/CBS
+                    (obrigatório para não optantes desde 2026), que o esta ainda não gera — a
+                    prefeitura pode recusar as notas.
+                  </span>
+                )}
               </div>
             </div>
 
