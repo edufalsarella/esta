@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { lerDbf, decodificarCp850 } from '../../packages/dbf/dbf.ts';
 import { DESTINOS, sugerirMapeamento, converterLinha, filtrarLinhas } from '../../packages/dbf/mapeamento.ts';
 import { detectarTabelasPreco } from '../../packages/dbf/tabelaPreco.ts';
-import { importarDestino, importarVeiculosExtras, importarTabelasPreco } from '../lib/importacaoDbf.js';
+import { detectarRpsPendentes, SERIE_RPS_IMPORTADO } from '../../packages/dbf/rpsPendentes.ts';
+import { importarDestino, importarVeiculosExtras, importarTabelasPreco, importarRpsPendentes } from '../lib/importacaoDbf.js';
+import { fmtBRL, fmtDataBR } from '../lib/tempo.js';
 import { supabase } from '../lib/supabase.js';
 import { TIPOS_TICKET } from '../lib/modelosPadrao.js';
 
@@ -37,6 +39,9 @@ export default function ImportarDbf({ perfil }) {
   const destinoAtual = DESTINOS[destino];
   const ehVeiculosExtra = destinoAtual.tipoImportacao === 'veiculos_extra';
   const ehTabelaPreco = destinoAtual.tipoImportacao === 'tabela_preco';
+  const ehRpsPendentes = destinoAtual.tipoImportacao === 'rps_pendentes';
+  // Destinos com campos detectados sozinhos (sem o mapeamento coluna-a-coluna).
+  const semMapeamento = ehTabelaPreco || ehRpsPendentes;
 
   function mudarDestino(novo) {
     setDestino(novo);
@@ -70,10 +75,10 @@ export default function ImportarDbf({ perfil }) {
   // no filtro, não a do arquivo inteiro, senão "Importar 500" engana quando
   // só 40 são mesmo serviço.
   const linhasFiltradas = useMemo(() => {
-    if (!dbf || ehTabelaPreco) return [];
+    if (!dbf || semMapeamento) return [];
     const linhas = dbf.registros.map((r) => converterLinha(r, destinoAtual.colunas, mapeamento));
     return filtrarLinhas(destinoAtual.colunas, linhas);
-  }, [dbf, mapeamento, destinoAtual, ehTabelaPreco]);
+  }, [dbf, mapeamento, destinoAtual, semMapeamento]);
   const preview = useMemo(() => linhasFiltradas.slice(0, LIMITE_PREVIA), [linhasFiltradas]);
 
   // Tabela de preço não passa pelo mapeamento manual coluna-a-coluna — os
@@ -84,6 +89,11 @@ export default function ImportarDbf({ perfil }) {
     return detectarTabelasPreco(dbf.campos.map((c) => c.nome), dbf.registros);
   }, [dbf, ehTabelaPreco]);
 
+  const rpsDetectados = useMemo(() => {
+    if (!dbf || !ehRpsPendentes) return { rps: [], faltandoCampos: [] };
+    return detectarRpsPendentes(dbf.campos.map((c) => c.nome), dbf.registros);
+  }, [dbf, ehRpsPendentes]);
+
   async function importar() {
     if (!dbf) return;
     setImportando(true); setErro(''); setResultado(null);
@@ -91,6 +101,8 @@ export default function ImportarDbf({ perfil }) {
       let res;
       if (ehTabelaPreco) {
         res = await importarTabelasPreco({ perfil, tabelas: tabelasDetectadas.tabelas, substituir });
+      } else if (ehRpsPendentes) {
+        res = await importarRpsPendentes({ perfil, rps: rpsDetectados.rps });
       } else {
         const convertidas = dbf.registros.map((r) => converterLinha(r, destinoAtual.colunas, mapeamento));
         const linhas = filtrarLinhas(destinoAtual.colunas, convertidas);
@@ -167,12 +179,21 @@ export default function ImportarDbf({ perfil }) {
             reconhecido na entrada do pátio com os veículos extras — não com o principal.
           </p>
         )}
-        <label className="campo-check" style={{ marginTop: 10 }}>
+        {!ehRpsPendentes && <label className="campo-check" style={{ marginTop: 10 }}>
           <input type="checkbox" checked={substituir} onChange={(e) => setSubstituir(e.target.checked)} />
           {ehTabelaPreco
             ? 'Substituir as tabelas que já existem (em vez de ignorar) — troca o cabeçalho e todas as faixas pelo que vier do arquivo'
             : 'Substituir os que já existem (em vez de ignorar) — use pra reimportar os dados de um cliente sem cancelar um por um antes'}
-        </label>
+        </label>}
+        {ehRpsPendentes && (
+          <p className="suave" style={{ fontSize: 12, marginTop: 10 }}>
+            Traz do ESTAMORT.dbf os RPS emitidos no sistema antigo que ainda não viraram NFS-e
+            (NUMERONF preenchido e NUMNFSE em branco). Entram como notas "gerada" na série
+            {' '}{SERIE_RPS_IMPORTADO}, com o mesmo número do RPS, pra enviar por NFS-e/RPS/DPS.
+            Alíquota e ISS vêm de Configurações → Fiscal. Um número que já foi importado é
+            ignorado — pode importar o mesmo arquivo de novo sem duplicar.
+          </p>
+        )}
         {ehVeiculosExtra && (
           <p className="suave" style={{ fontSize: 12, marginTop: 10 }}>
             Cada linha vira um veículo de um mensalista que já existe (achado pelo código
@@ -238,7 +259,49 @@ export default function ImportarDbf({ perfil }) {
         </div>
       )}
 
-      {dbf && !ehTabelaPreco && (
+      {dbf && ehRpsPendentes && (
+        <div className="card">
+          <h2>RPS pendentes encontrados ({rpsDetectados.rps.length})</h2>
+          {rpsDetectados.faltandoCampos.length > 0 ? (
+            <p className="aviso">
+              Este arquivo não parece o ESTAMORT.dbf — faltam os campos {rpsDetectados.faltandoCampos.join(', ')}.
+            </p>
+          ) : (
+            <>
+              <div className="tabela-scroll">
+                <table>
+                  <thead><tr><th>RPS</th><th>Data</th><th>Placa</th><th>Valor</th><th>Descrição</th><th>Tomador</th></tr></thead>
+                  <tbody>
+                    {rpsDetectados.rps.slice(0, LIMITE_PREVIA).map((r) => (
+                      <tr key={r.numero_rps}>
+                        <td className="mono">{SERIE_RPS_IMPORTADO}/{r.numero_rps}</td>
+                        <td>{r.competencia ? fmtDataBR(r.competencia) : '—'}</td>
+                        <td className="mono">{r.placa || '—'}</td>
+                        <td>{fmtBRL(r.valor)}</td>
+                        <td>{r.descricao || '—'}</td>
+                        <td>{r.tomador.cpf_cnpj ? `${r.tomador.nome || '—'} (${r.tomador.cpf_cnpj})` : 'sem identificação'}</td>
+                      </tr>
+                    ))}
+                    {rpsDetectados.rps.length === 0 && (
+                      <tr><td colSpan={6} className="suave">Nenhum RPS pendente — todos os RPS do arquivo já têm NFS-e.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {rpsDetectados.rps.length > LIMITE_PREVIA && (
+                <p className="suave" style={{ fontSize: 12 }}>+ {rpsDetectados.rps.length - LIMITE_PREVIA} RPS a mais, não mostrado(s) aqui.</p>
+              )}
+              <div className="linha-form" style={{ marginTop: 16 }}>
+                <button className="btn-primary" onClick={importar} disabled={importando || !rpsDetectados.rps.length}>
+                  {importando ? 'Importando…' : `Importar ${rpsDetectados.rps.length} RPS`}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {dbf && !semMapeamento && (
         <div className="card">
           <h2>Mapeamento — {destinoAtual.rotulo}</h2>
           <p className="suave">
@@ -299,7 +362,7 @@ export default function ImportarDbf({ perfil }) {
             <strong>{resultado.criados}</strong> criado(s)
             {resultado.atualizados > 0 && <>, <strong>{resultado.atualizados}</strong> atualizado(s)</>}
             {', '}<strong>{resultado.ignorados}</strong> ignorado(s)
-            {' '}({ehVeiculosExtra ? 'placa já cadastrada' : ehTabelaPreco ? 'tipo já tem tabela vigente' : 'código já existia'}).
+            {' '}({ehVeiculosExtra ? 'placa já cadastrada' : ehTabelaPreco ? 'tipo já tem tabela vigente' : ehRpsPendentes ? 'RPS já importado' : 'código já existia'}).
           </p>
           {resultado.erros.length > 0 && (
             <>

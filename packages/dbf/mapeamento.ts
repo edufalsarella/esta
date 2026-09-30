@@ -40,7 +40,7 @@ export type Destino = {
    * direto pelos nomes de campo, não escolhido à mão). `colunas` fica vazio
    * pra esse tipo, só existe aqui pra aparecer no seletor "O que importar?".
    */
-  tipoImportacao?: 'cadastro' | 'veiculos_extra' | 'tabela_preco';
+  tipoImportacao?: 'cadastro' | 'veiculos_extra' | 'tabela_preco' | 'rps_pendentes';
 };
 
 export const DESTINOS: Record<string, Destino> = {
@@ -198,6 +198,15 @@ export const DESTINOS: Record<string, Destino> = {
     rotulo: 'Tabela de preço (ESTAHORA)',
     tabela: 'tabelas_preco',
     tipoImportacao: 'tabela_preco',
+    colunas: [],
+  },
+  // ESTAMORT.dbf: RPS emitidos no legado e ainda sem NFS-e (implantação num
+  // cliente em uso). Campos fixos do ESTAMORT, sem mapeamento manual — ver
+  // packages/dbf/rpsPendentes.ts.
+  rps_pendentes: {
+    rotulo: 'RPS pendentes de envio (ESTAMORT)',
+    tabela: 'notas_fiscais',
+    tipoImportacao: 'rps_pendentes',
     colunas: [],
   },
 };

@@ -7,6 +7,10 @@
 // reimportar os dados de um cliente sem precisar apagar um por um antes.
 import { supabase } from './supabase.js';
 import { normalizar } from './texto.js';
+import { municipioIbgeDe } from './cnpj.js';
+import { AR_PARA_ABRASF } from './issRetido.js';
+import { aliquotaIssConfigurada, gerarXmlDPS, gerarXmlAbrasfLoteRps } from './fiscal.js';
+import { SERIE_RPS_IMPORTADO } from '../../packages/dbf/rpsPendentes.ts';
 
 const TAMANHO_LOTE = 200;
 
@@ -289,6 +293,79 @@ export async function importarTabelasPreco({ perfil, tabelas, substituir = false
       }
     }
     if (idExistente) resultado.atualizados++; else resultado.criados++;
+  }
+
+  return resultado;
+}
+
+/**
+ * RPS pendentes do legado (ver packages/dbf/rpsPendentes.ts) viram notas
+ * "gerada" na série fixa SERIE_RPS_IMPORTADO, com o número do RPS do legado
+ * (é o que o cliente recebeu no comprovante). Série + número que já existe
+ * na filial é ignorado — reimportar o mesmo arquivo não duplica. Alíquota e
+ * ISS vêm da configuração do app, não do arquivo. O contador da série fica
+ * acima do maior número importado.
+ */
+export async function importarRpsPendentes({ perfil, rps }) {
+  const resultado = { criados: 0, atualizados: 0, ignorados: 0, erros: [] };
+  if (!rps.length) return resultado;
+
+  const [{ data: filial, error: errFilial }, { data: existentes, error: errExistentes }] = await Promise.all([
+    supabase.from('filiais').select('*').eq('id', perfil.filial_id).maybeSingle(),
+    supabase.from('notas_fiscais').select('numero_rps').eq('filial_id', perfil.filial_id).eq('serie', SERIE_RPS_IMPORTADO),
+  ]);
+  if (errFilial || !filial) { resultado.erros.push({ linha: 0, motivo: errFilial?.message || 'Filial não encontrada.' }); return resultado; }
+  if (errExistentes) { resultado.erros.push({ linha: 0, motivo: `Erro ao consultar notas existentes: ${errExistentes.message}` }); return resultado; }
+
+  const jaExistem = new Set((existentes || []).map((n) => Number(n.numero_rps)));
+  const aliquota = aliquotaIssConfigurada(filial);
+  const padrao = filial.config?.nfse?.padrao || 'padrao_nacional_campinas';
+  const ibgePorCidade = new Map();
+
+  const payload = [];
+  for (const r of rps) {
+    if (jaExistem.has(r.numero_rps)) { resultado.ignorados++; continue; }
+    jaExistem.add(r.numero_rps);
+    if (!r.competencia) { resultado.erros.push({ linha: r.numero_rps, motivo: 'RPS sem data (DATASAIDA/DATA) — ignorado.' }); continue; }
+
+    const t = r.tomador;
+    const chaveCidade = `${t.cidade}|${t.uf}`;
+    if (t.cidade && !ibgePorCidade.has(chaveCidade)) ibgePorCidade.set(chaveCidade, await municipioIbgeDe(t.cidade, t.uf));
+    const mun = t.cidade ? ibgePorCidade.get(chaveCidade) : null;
+    const tomador = t.cpf_cnpj ? {
+      ...t,
+      ...(mun ? { cidade: mun.nome, uf: mun.uf, cod_ibge: mun.codigo } : {}),
+      issRetido: AR_PARA_ABRASF[r.tipoRecol] || null,
+    } : {};
+
+    const nota = {
+      filial_id: perfil.filial_id, movimento_id: null,
+      numero_rps: r.numero_rps, serie: SERIE_RPS_IMPORTADO, competencia: r.competencia,
+      descricao: r.descricao || 'Estacionamento de veículo',
+      valor: r.valor, aliquota_iss: aliquota,
+      valor_iss: Number((r.valor * aliquota / 100).toFixed(2)),
+      tomador, status: 'gerada',
+    };
+    nota.xml = padrao === 'abrasf' ? gerarXmlAbrasfLoteRps({ nota, filial }) : gerarXmlDPS({ nota, filial });
+    payload.push(nota);
+  }
+
+  for (const lote of emLotes(payload, TAMANHO_LOTE)) {
+    const { error } = await supabase.from('notas_fiscais').insert(lote);
+    if (error) { lote.forEach((n) => resultado.erros.push({ linha: n.numero_rps, motivo: error.message })); continue; }
+    resultado.criados += lote.length;
+  }
+
+  // Contador da série acima do maior número do arquivo — se um dia a filial
+  // passar a emitir nessa série, nunca repete um número importado.
+  const maior = Math.max(...rps.map((r) => r.numero_rps));
+  const { data: seq } = await supabase.from('fiscal_sequencias').select('proximo')
+    .eq('filial_id', perfil.filial_id).eq('serie', SERIE_RPS_IMPORTADO).maybeSingle();
+  if (!seq) {
+    await supabase.from('fiscal_sequencias').insert({ filial_id: perfil.filial_id, serie: SERIE_RPS_IMPORTADO, proximo: maior + 1 });
+  } else if (seq.proximo <= maior) {
+    await supabase.from('fiscal_sequencias').update({ proximo: maior + 1 })
+      .eq('filial_id', perfil.filial_id).eq('serie', SERIE_RPS_IMPORTADO);
   }
 
   return resultado;
