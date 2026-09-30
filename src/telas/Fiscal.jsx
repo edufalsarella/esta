@@ -4,6 +4,7 @@ import { fmtBRL, fmtDataBR } from '../lib/tempo.js';
 import { atualizarNotaFiscal } from '../lib/notaFiscal.js';
 import { erroCpfCnpj, validarCpfCnpj } from '../lib/documento.js';
 import { buscarCnpj, municipioIbgeDe } from '../lib/cnpj.js';
+import { buscarTomadorCadastrado } from '../lib/tomador.js';
 import { issRetidoDaPlaca, salvarIssRetidoDaPlaca, AR_PARA_ABRASF, ABRASF_PARA_AR } from '../lib/issRetido.js';
 import { carregarModelosTicket } from '../lib/dados.js';
 import { montarTicketRps } from '../lib/dadosTicket.js';
@@ -28,6 +29,7 @@ export default function Fiscal({ perfil }) {
   const [salvando, setSalvando] = useState(false);
   const [buscandoCnpj, setBuscandoCnpj] = useState(false);
   const [erroCnpj, setErroCnpj] = useState('');
+  const [origemTomador, setOrigemTomador] = useState(''); // de onde vieram os dados auto-preenchidos (ver preencherTomadorCadastrado)
 
   const carregar = useCallback(async () => {
     setErro('');
@@ -118,6 +120,7 @@ export default function Fiscal({ perfil }) {
       issRetido: t.issRetido || '', _placa: null,
     });
     setErroCnpj('');
+    setOrigemTomador('');
 
     // Nota veio de uma saída do pátio (tem movimento) — se o recolhimento
     // dessa placa já foi descoberto/corrigido antes (ver src/lib/issRetido.js),
@@ -148,6 +151,28 @@ export default function Fiscal({ perfil }) {
       numero: r.numero || a.numero, bairro: r.bairro || a.bairro, cep: r.cep || a.cep,
       ...(mun ? { cidade: mun.nome, uf: mun.uf, cod_ibge: mun.codigo } : (r.cidade ? { cidade: r.cidade, uf: r.uf } : {})),
     }));
+  }
+
+  /**
+   * CPF/CNPJ que já apareceu antes (nota anterior, mensalista, convênio;
+   * CNPJ também na Receita — ver src/lib/tomador.js): preenche só os campos
+   * ainda vazios, nunca apaga o que já foi digitado.
+   */
+  async function preencherTomadorCadastrado() {
+    const doc = alterando?.cpf_cnpj || '';
+    if (erroCpfCnpj(doc) || validarCpfCnpj(doc).vazio) return;
+    const t = await buscarTomadorCadastrado(supabase, doc);
+    if (!t) return;
+    const { origem, ...dados } = t;
+    setAlterando((a) => {
+      if (!a || a.cpf_cnpj !== doc) return a;
+      const preenchido = { ...a };
+      for (const [campo, valor] of Object.entries(dados)) {
+        if (valor && !String(a[campo] ?? '').trim()) preenchido[campo] = valor;
+      }
+      return preenchido;
+    });
+    setOrigemTomador(origem);
   }
 
   async function salvarAlteracao(e) {
@@ -323,7 +348,8 @@ export default function Fiscal({ perfil }) {
                 <div className="campo" style={{ maxWidth: 180 }}>
                   <label>CPF/CNPJ</label>
                   <input className="mono" value={alterando.cpf_cnpj}
-                    onChange={(e) => { setAlterando({ ...alterando, cpf_cnpj: e.target.value }); setErroCnpj(''); }} />
+                    onChange={(e) => { setAlterando({ ...alterando, cpf_cnpj: e.target.value }); setErroCnpj(''); setOrigemTomador(''); }}
+                    onBlur={preencherTomadorCadastrado} />
                   {erroCpfCnpj(alterando.cpf_cnpj) && (
                     <span className="aviso" style={{ fontSize: 11 }}>{erroCpfCnpj(alterando.cpf_cnpj)}</span>
                   )}
@@ -340,6 +366,9 @@ export default function Fiscal({ perfil }) {
                 )}
               </div>
               {erroCnpj && <p className="aviso" style={{ fontSize: 11 }}>{erroCnpj}</p>}
+              {origemTomador && (
+                <p className="suave" style={{ fontSize: 11, marginTop: -6 }}>Campos vazios preenchidos com dados de: {origemTomador}.</p>
+              )}
               <div className="campo" style={{ marginBottom: 10, maxWidth: 260 }}>
                 <label>ISS retido pelo tomador?</label>
                 <select value={alterando.issRetido} onChange={(e) => setAlterando({ ...alterando, issRetido: e.target.value })}>

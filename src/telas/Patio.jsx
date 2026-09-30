@@ -16,7 +16,9 @@ import AbrirCaixaInline from '../componentes/AbrirCaixaInline.jsx';
 import { criarNotaFiscal } from '../lib/notaFiscal.js';
 import { dadosFilial, dadosMovimento, permanenciaDe, montarTicketRps, dadosDivida } from '../lib/dadosTicket.js';
 import { erroCpfCnpj, validarCpfCnpj, formatarCpfCnpj } from '../lib/documento.js';
-import { buscarCnpj } from '../lib/cnpj.js';
+import { buscarCnpj, municipioIbgeDe } from '../lib/cnpj.js';
+import { buscarTomadorCadastrado, resumoEndereco } from '../lib/tomador.js';
+import { faltasEnderecoTomador } from '../lib/fiscal.js';
 import { issRetidoDaPlaca, salvarIssRetidoDaPlaca, AR_PARA_ABRASF, ABRASF_PARA_AR } from '../lib/issRetido.js';
 import { ehGerente, nfseAtivo } from '../lib/acesso.js';
 import { configInfinitePay, ehCelular, parcelasPossiveis, cobrarNoInfiniteTap } from '../lib/infinitepay.js';
@@ -1173,7 +1175,27 @@ export default function Patio({ perfil }) {
   function onKeyDownDocumentoDps(e) {
     if (e.key !== 'Enter') return;
     e.preventDefault();
+    buscarDadosTomadorDps();
     inputNomeDpsRef.current?.focus();
+  }
+
+  /**
+   * CPF/CNPJ que já apareceu antes (nota anterior, mensalista, convênio; CNPJ
+   * também na Receita — ver src/lib/tomador.js): traz nome e endereço, que
+   * vai junto pra nota (Campinas exige endereço de tomador identificado).
+   * Nome já digitado não é sobrescrito.
+   */
+  async function buscarDadosTomadorDps() {
+    const doc = modalDps?.documento || '';
+    if (erroCpfCnpj(doc) || validarCpfCnpj(doc).vazio || doc === modalDps.docBuscado) return;
+    setModalDps((s) => (s ? { ...s, docBuscado: doc, buscandoTomador: true } : s));
+    const t = await buscarTomadorCadastrado(supabase, doc);
+    setModalDps((s) => {
+      if (!s || s.documento !== doc) return s;
+      if (!t) return { ...s, buscandoTomador: false, extra: null, origem: null };
+      const { nome, origem, ...extra } = t;
+      return { ...s, buscandoTomador: false, nome: s.nome.trim() ? s.nome : nome, extra, origem };
+    });
   }
 
   /** Nome/Razão social (Gerar DPS) — Enter foca o botão "Confirmar saída e
@@ -1192,9 +1214,14 @@ export default function Patio({ perfil }) {
   async function buscarNomePorCnpj() {
     setErroCnpj(''); setBuscandoCnpj(true);
     const r = await buscarCnpj(modalDps.documento);
+    if (r.erro) { setBuscandoCnpj(false); setErroCnpj(r.erro); return; }
+    const mun = await municipioIbgeDe(r.cidade, r.uf);
     setBuscandoCnpj(false);
-    if (r.erro) { setErroCnpj(r.erro); return; }
-    setModalDps((s) => ({ ...s, nome: r.nome || s.nome }));
+    const { nome, ...endereco } = r;
+    setModalDps((s) => ({
+      ...s, nome: nome || s.nome, origem: 'Receita Federal (CNPJ)',
+      extra: { ...endereco, ...(mun ? { cidade: mun.nome, uf: mun.uf, cod_ibge: mun.codigo } : {}) },
+    }));
   }
 
   function abrirModalValor() {
@@ -2534,7 +2561,8 @@ export default function Patio({ perfil }) {
               <div className="campo" style={{ flex: 1 }}>
                 <label>CPF/CNPJ (opcional)</label>
                 <input className="mono" value={modalDps.documento}
-                  onChange={(e) => { setModalDps({ ...modalDps, documento: e.target.value }); setErroCnpj(''); }}
+                  onChange={(e) => { setModalDps({ ...modalDps, documento: e.target.value, extra: null, origem: null, docBuscado: null }); setErroCnpj(''); }}
+                  onBlur={buscarDadosTomadorDps}
                   onKeyDown={onKeyDownDocumentoDps}
                   placeholder="Deixe em branco para não identificar" />
                 {erroCpfCnpj(modalDps.documento)
@@ -2547,7 +2575,7 @@ export default function Patio({ perfil }) {
               </div>
               {validarCpfCnpj(modalDps.documento).tipo === 'CNPJ' && (
                 <button type="button" className="btn-ghost" disabled={buscandoCnpj} onClick={buscarNomePorCnpj}>
-                  {buscandoCnpj ? 'Buscando…' : 'Buscar nome'}
+                  {buscandoCnpj ? 'Buscando…' : 'Buscar na Receita'}
                 </button>
               )}
             </div>
@@ -2559,6 +2587,20 @@ export default function Patio({ perfil }) {
                 onKeyDown={onKeyDownNomeDps}
                 placeholder="Em branco vira &quot;CONSUMIDOR&quot; no documento" />
             </div>
+            {modalDps.buscandoTomador && <p className="suave" style={{ fontSize: 12 }}>Procurando dados já cadastrados…</p>}
+            {!modalDps.buscandoTomador && modalDps.extra && resumoEndereco(modalDps.extra) && (
+              <p className="suave" style={{ fontSize: 12 }}>
+                Endereço ({modalDps.origem}): {resumoEndereco(modalDps.extra)}
+              </p>
+            )}
+            {!modalDps.buscandoTomador && !validarCpfCnpj(modalDps.documento).vazio && !erroCpfCnpj(modalDps.documento)
+              && modalDps.docBuscado === modalDps.documento && faltasEnderecoTomador(modalDps.extra || {}).length > 0 && (
+              <p className="aviso" style={{ fontSize: 12 }}>
+                Sem endereço completo pra este {validarCpfCnpj(modalDps.documento).tipo} (falta:{' '}
+                {faltasEnderecoTomador(modalDps.extra || {}).join(', ')}). A prefeitura exige — a nota fica com
+                erro até completar o endereço em NFS-e/RPS/DPS → Alterar.
+              </p>
+            )}
             <div className="campo" style={{ marginTop: 10 }}>
               <label>ISS retido pelo tomador?</label>
               <select value={modalDps.issRetido} onChange={(e) => setModalDps({ ...modalDps, issRetido: e.target.value })}>
@@ -2587,7 +2629,7 @@ export default function Patio({ perfil }) {
                   identificado); errado, não — a prefeitura rejeitaria. */}
               <button className="btn-primary" ref={btnConfirmarDpsRef}
                 disabled={!!erroCpfCnpj(modalDps.documento) || salvandoSaida || pagamentoDivergente || mensalistaExtraPendente}
-                onClick={() => confirmarSaida({ cpf_cnpj: modalDps.documento, nome: modalDps.nome, issRetido: modalDps.issRetido || null })}>
+                onClick={() => confirmarSaida({ ...(modalDps.extra || {}), cpf_cnpj: modalDps.documento, nome: modalDps.nome, issRetido: modalDps.issRetido || null })}>
                 {salvandoSaida ? 'Confirmando…' : 'Confirmar saída e gerar DPS'}
               </button>
             </div>
