@@ -401,7 +401,8 @@ export default function Fiscal({ perfil }) {
                     onChange={(e) => setAlterando({ ...alterando, bairro: e.target.value })} />
                 </div>
                 <div style={{ flex: 2 }}>
-                  <CidadeBusca
+                  {/* key: o campo só lê `valor` ao montar — recria quando a busca por CPF/CNPJ preenche a cidade. */}
+                  <CidadeBusca key={alterando.cod_ibge || 'sem-cidade'}
                     valor={alterando.cidade && alterando.uf ? `${alterando.cidade} - ${alterando.uf}` : (alterando.cidade || '')}
                     onSelecionar={(mun) => setAlterando({ ...alterando, cidade: mun.nome, uf: mun.uf, cod_ibge: mun.codigo })}
                   />

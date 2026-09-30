@@ -17,7 +17,8 @@ import { criarNotaFiscal } from '../lib/notaFiscal.js';
 import { dadosFilial, dadosMovimento, permanenciaDe, montarTicketRps, dadosDivida } from '../lib/dadosTicket.js';
 import { erroCpfCnpj, validarCpfCnpj, formatarCpfCnpj } from '../lib/documento.js';
 import { buscarCnpj, municipioIbgeDe } from '../lib/cnpj.js';
-import { buscarTomadorCadastrado, resumoEndereco } from '../lib/tomador.js';
+import { buscarTomadorCadastrado } from '../lib/tomador.js';
+import CidadeBusca from '../componentes/CidadeBusca.jsx';
 import { faltasEnderecoTomador } from '../lib/fiscal.js';
 import { issRetidoDaPlaca, salvarIssRetidoDaPlaca, AR_PARA_ABRASF, ABRASF_PARA_AR } from '../lib/issRetido.js';
 import { ehGerente, nfseAtivo } from '../lib/acesso.js';
@@ -121,6 +122,7 @@ export default function Patio({ perfil }) {
   const btnConfirmarSaidaRef = useRef(null);
   const btnFecharServicosRef = useRef(null);
   const inputNomeDpsRef = useRef(null);
+  const inputCepDpsRef = useRef(null);
   const btnConfirmarDpsRef = useRef(null);
   // Ausente = true (comportamento de sempre): só desliga se explicitamente false.
   const imprimeTicketMensalista = filial?.config?.patio?.imprimeTicketMensalista !== false;
@@ -1203,7 +1205,14 @@ export default function Patio({ perfil }) {
   function onKeyDownNomeDps(e) {
     if (e.key !== 'Enter') return;
     e.preventDefault();
-    btnConfirmarDpsRef.current?.focus();
+    // Tomador identificado sem endereço completo: Enter leva pro CEP, não pra confirmar.
+    const identificado = !validarCpfCnpj(modalDps.documento).vazio && !erroCpfCnpj(modalDps.documento);
+    if (identificado && faltasEnderecoTomador(modalDps.extra || {}).length) inputCepDpsRef.current?.focus();
+    else btnConfirmarDpsRef.current?.focus();
+  }
+
+  function setEnderecoDps(campos) {
+    setModalDps((s) => (s ? { ...s, extra: { ...(s.extra || {}), ...campos } } : s));
   }
 
   /**
@@ -2588,18 +2597,47 @@ export default function Patio({ perfil }) {
                 placeholder="Em branco vira &quot;CONSUMIDOR&quot; no documento" />
             </div>
             {modalDps.buscandoTomador && <p className="suave" style={{ fontSize: 12 }}>Procurando dados já cadastrados…</p>}
-            {!modalDps.buscandoTomador && modalDps.extra && resumoEndereco(modalDps.extra) && (
-              <p className="suave" style={{ fontSize: 12 }}>
-                Endereço ({modalDps.origem}): {resumoEndereco(modalDps.extra)}
-              </p>
-            )}
-            {!modalDps.buscandoTomador && !validarCpfCnpj(modalDps.documento).vazio && !erroCpfCnpj(modalDps.documento)
-              && modalDps.docBuscado === modalDps.documento && faltasEnderecoTomador(modalDps.extra || {}).length > 0 && (
-              <p className="aviso" style={{ fontSize: 12 }}>
-                Sem endereço completo pra este {validarCpfCnpj(modalDps.documento).tipo} (falta:{' '}
-                {faltasEnderecoTomador(modalDps.extra || {}).join(', ')}). A prefeitura exige — a nota fica com
-                erro até completar o endereço em NFS-e/RPS/DPS → Alterar.
-              </p>
+            {/* Tomador identificado precisa de endereço (Campinas recusa sem;
+                ver faltasEnderecoTomador). Já vem preenchido quando o
+                documento é conhecido (buscarDadosTomadorDps). */}
+            {!validarCpfCnpj(modalDps.documento).vazio && !erroCpfCnpj(modalDps.documento) && (
+              <>
+                <p className="suave" style={{ fontSize: 12, margin: '8px 0 4px' }}>
+                  Endereço do tomador{modalDps.origem ? ` (de: ${modalDps.origem})` : ''}
+                </p>
+                <div className="linha-form" style={{ marginBottom: 6 }}>
+                  <div className="campo" style={{ width: 120 }}>
+                    <label>CEP</label>
+                    <input ref={inputCepDpsRef} className="mono" value={modalDps.extra?.cep || ''}
+                      onChange={(e) => setEnderecoDps({ cep: e.target.value })} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <CidadeBusca key={modalDps.extra?.cod_ibge || 'sem-cidade'}
+                      valor={modalDps.extra?.cidade ? `${modalDps.extra.cidade}${modalDps.extra.uf ? ` - ${modalDps.extra.uf}` : ''}` : ''}
+                      onSelecionar={(mun) => setEnderecoDps({ cidade: mun.nome, uf: mun.uf, cod_ibge: mun.codigo })} />
+                  </div>
+                </div>
+                <div className="linha-form" style={{ marginBottom: 6 }}>
+                  <div className="campo" style={{ flex: 2 }}>
+                    <label>Logradouro</label>
+                    <input value={modalDps.extra?.endereco || ''} onChange={(e) => setEnderecoDps({ endereco: e.target.value })} />
+                  </div>
+                  <div className="campo" style={{ width: 80 }}>
+                    <label>Número</label>
+                    <input value={modalDps.extra?.numero || ''} onChange={(e) => setEnderecoDps({ numero: e.target.value })} />
+                  </div>
+                  <div className="campo" style={{ flex: 1 }}>
+                    <label>Bairro</label>
+                    <input value={modalDps.extra?.bairro || ''} onChange={(e) => setEnderecoDps({ bairro: e.target.value })} />
+                  </div>
+                </div>
+                {!modalDps.buscandoTomador && faltasEnderecoTomador(modalDps.extra || {}).length > 0 && (
+                  <p className="aviso" style={{ fontSize: 12 }}>
+                    Falta: {faltasEnderecoTomador(modalDps.extra || {}).join(', ')} — sem o endereço completo a
+                    prefeitura recusa e a nota fica com erro.
+                  </p>
+                )}
+              </>
             )}
             <div className="campo" style={{ marginTop: 10 }}>
               <label>ISS retido pelo tomador?</label>
