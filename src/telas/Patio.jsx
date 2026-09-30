@@ -18,6 +18,7 @@ import { dadosFilial, dadosMovimento, permanenciaDe, montarTicketRps, dadosDivid
 import { erroCpfCnpj, validarCpfCnpj, formatarCpfCnpj } from '../lib/documento.js';
 import { buscarCnpj, municipioIbgeDe } from '../lib/cnpj.js';
 import { buscarTomadorCadastrado } from '../lib/tomador.js';
+import { buscarCep } from '../lib/cep.js';
 import CidadeBusca from '../componentes/CidadeBusca.jsx';
 import { faltasEnderecoTomador } from '../lib/fiscal.js';
 import { issRetidoDaPlaca, salvarIssRetidoDaPlaca, AR_PARA_ABRASF, ABRASF_PARA_AR } from '../lib/issRetido.js';
@@ -123,6 +124,7 @@ export default function Patio({ perfil }) {
   const btnFecharServicosRef = useRef(null);
   const inputNomeDpsRef = useRef(null);
   const inputCepDpsRef = useRef(null);
+  const inputNumeroDpsRef = useRef(null);
   const btnConfirmarDpsRef = useRef(null);
   // Ausente = true (comportamento de sempre): só desliga se explicitamente false.
   const imprimeTicketMensalista = filial?.config?.patio?.imprimeTicketMensalista !== false;
@@ -1213,6 +1215,25 @@ export default function Patio({ perfil }) {
 
   function setEnderecoDps(campos) {
     setModalDps((s) => (s ? { ...s, extra: { ...(s.extra || {}), ...campos } } : s));
+  }
+
+  /** CEP completo (8 dígitos) preenche logradouro/bairro/cidade (ver src/lib/cep.js) e leva pro Número. */
+  async function mudarCepDps(valor) {
+    setEnderecoDps({ cep: valor });
+    const cep = valor.replace(/\D/g, '');
+    setModalDps((s) => (s ? { ...s, erroCep: '', buscandoCep: cep.length === 8 } : s));
+    if (cep.length !== 8) return;
+    const r = await buscarCep(cep);
+    setModalDps((s) => {
+      if (!s || String(s.extra?.cep || '').replace(/\D/g, '') !== cep) return s;
+      if (r.erro) return { ...s, buscandoCep: false, erroCep: r.erro };
+      // CEP geral de cidade vem sem rua/bairro: não apaga o que já foi digitado.
+      const extra = { ...(s.extra || {}), cidade: r.cidade, uf: r.uf, cod_ibge: r.cod_ibge };
+      if (r.endereco) extra.endereco = r.endereco;
+      if (r.bairro) extra.bairro = r.bairro;
+      return { ...s, buscandoCep: false, extra };
+    });
+    if (!r.erro) requestAnimationFrame(() => inputNumeroDpsRef.current?.focus());
   }
 
   /**
@@ -2570,7 +2591,7 @@ export default function Patio({ perfil }) {
               <div className="campo" style={{ flex: 1 }}>
                 <label>CPF/CNPJ (opcional)</label>
                 <input className="mono" value={modalDps.documento}
-                  onChange={(e) => { setModalDps({ ...modalDps, documento: e.target.value, extra: null, origem: null, docBuscado: null }); setErroCnpj(''); }}
+                  onChange={(e) => { setModalDps({ ...modalDps, documento: e.target.value, extra: null, origem: null, docBuscado: null, erroCep: '' }); setErroCnpj(''); }}
                   onBlur={buscarDadosTomadorDps}
                   onKeyDown={onKeyDownDocumentoDps}
                   placeholder="Deixe em branco para não identificar" />
@@ -2608,8 +2629,10 @@ export default function Patio({ perfil }) {
                 <div className="linha-form" style={{ marginBottom: 6 }}>
                   <div className="campo" style={{ width: 120 }}>
                     <label>CEP</label>
-                    <input ref={inputCepDpsRef} className="mono" value={modalDps.extra?.cep || ''}
-                      onChange={(e) => setEnderecoDps({ cep: e.target.value })} />
+                    <input ref={inputCepDpsRef} className="mono" value={modalDps.extra?.cep || ''} maxLength={9}
+                      onChange={(e) => mudarCepDps(e.target.value)} />
+                    {modalDps.buscandoCep && <span className="suave" style={{ fontSize: 11 }}>Buscando CEP…</span>}
+                    {modalDps.erroCep && <span className="aviso" style={{ fontSize: 11 }}>{modalDps.erroCep}</span>}
                   </div>
                   <div style={{ flex: 1 }}>
                     <CidadeBusca key={modalDps.extra?.cod_ibge || 'sem-cidade'}
@@ -2624,7 +2647,7 @@ export default function Patio({ perfil }) {
                   </div>
                   <div className="campo" style={{ width: 80 }}>
                     <label>Número</label>
-                    <input value={modalDps.extra?.numero || ''} onChange={(e) => setEnderecoDps({ numero: e.target.value })} />
+                    <input ref={inputNumeroDpsRef} value={modalDps.extra?.numero || ''} onChange={(e) => setEnderecoDps({ numero: e.target.value })} />
                   </div>
                   <div className="campo" style={{ flex: 1 }}>
                     <label>Bairro</label>

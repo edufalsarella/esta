@@ -5,6 +5,7 @@ import { atualizarNotaFiscal } from '../lib/notaFiscal.js';
 import { erroCpfCnpj, validarCpfCnpj } from '../lib/documento.js';
 import { buscarCnpj, municipioIbgeDe } from '../lib/cnpj.js';
 import { buscarTomadorCadastrado } from '../lib/tomador.js';
+import { buscarCep } from '../lib/cep.js';
 import { issRetidoDaPlaca, salvarIssRetidoDaPlaca, AR_PARA_ABRASF, ABRASF_PARA_AR } from '../lib/issRetido.js';
 import { carregarModelosTicket } from '../lib/dados.js';
 import { montarTicketRps } from '../lib/dadosTicket.js';
@@ -29,6 +30,8 @@ export default function Fiscal({ perfil }) {
   const [salvando, setSalvando] = useState(false);
   const [buscandoCnpj, setBuscandoCnpj] = useState(false);
   const [erroCnpj, setErroCnpj] = useState('');
+  const [buscandoCep, setBuscandoCep] = useState(false);
+  const [erroCep, setErroCep] = useState('');
   const [origemTomador, setOrigemTomador] = useState(''); // de onde vieram os dados auto-preenchidos (ver preencherTomadorCadastrado)
 
   const carregar = useCallback(async () => {
@@ -121,6 +124,7 @@ export default function Fiscal({ perfil }) {
     });
     setErroCnpj('');
     setOrigemTomador('');
+    setErroCep('');
 
     // Nota veio de uma saída do pátio (tem movimento) — se o recolhimento
     // dessa placa já foi descoberto/corrigido antes (ver src/lib/issRetido.js),
@@ -173,6 +177,27 @@ export default function Fiscal({ perfil }) {
       return preenchido;
     });
     setOrigemTomador(origem);
+  }
+
+  /** CEP completo (8 dígitos) preenche logradouro/bairro/cidade (ver src/lib/cep.js). */
+  async function mudarCepAlterar(valor) {
+    setAlterando((a) => ({ ...a, cep: valor }));
+    setErroCep('');
+    const cep = valor.replace(/\D/g, '');
+    if (cep.length !== 8) return;
+    setBuscandoCep(true);
+    const r = await buscarCep(cep);
+    setBuscandoCep(false);
+    if (r.erro) { setErroCep(r.erro); return; }
+    setAlterando((a) => {
+      if (!a || String(a.cep || '').replace(/\D/g, '') !== cep) return a;
+      // CEP geral de cidade vem sem rua/bairro: não apaga o que já foi digitado.
+      return {
+        ...a, cidade: r.cidade, uf: r.uf, cod_ibge: r.cod_ibge,
+        ...(r.endereco ? { endereco: r.endereco } : {}),
+        ...(r.bairro ? { bairro: r.bairro } : {}),
+      };
+    });
   }
 
   async function salvarAlteracao(e) {
@@ -409,8 +434,10 @@ export default function Fiscal({ perfil }) {
                 </div>
                 <div className="campo" style={{ width: 120 }}>
                   <label>CEP</label>
-                  <input className="mono" value={alterando.cep}
-                    onChange={(e) => setAlterando({ ...alterando, cep: e.target.value })} />
+                  <input className="mono" value={alterando.cep} maxLength={9}
+                    onChange={(e) => mudarCepAlterar(e.target.value)} />
+                  {buscandoCep && <span className="suave" style={{ fontSize: 11 }}>Buscando CEP…</span>}
+                  {erroCep && <span className="aviso" style={{ fontSize: 11 }}>{erroCep}</span>}
                 </div>
               </div>
               <div className="linha-form" style={{ marginBottom: 10 }}>
