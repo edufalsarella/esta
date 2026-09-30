@@ -112,13 +112,14 @@ export default async function handler(req, res) {
       return;
     }
 
-    // Tomador identificado sem endereço completo: Campinas recusa com CPF ou
-    // CNPJ ("Estado deve ser informado"); a regra nacional exige com CNPJ.
-    // Barra antes, dizendo o que falta, em vez do L9999.
+    // Tomador com CNPJ sem endereço completo: a regra nacional exige — barra
+    // antes, dizendo o que falta, em vez do L9999. Com CPF é opcional (a IMA
+    // chegou a exigir, "Estado deve ser informado", mas anunciou no grupo
+    // wsnfsecampinas que vai deixar de exigir): vai sem endereço se incompleto.
     const docTomador = String(nota.tomador?.cpf_cnpj || '').replace(/\D/g, '');
     const faltas = faltasEnderecoTomador(nota.tomador || {});
-    if (docTomador && faltas.length && (padrao !== 'padrao_nacional' || docTomador.length === 14)) {
-      const mensagem = `Tomador com ${docTomador.length === 14 ? 'CNPJ' : 'CPF'} sem endereço completo — falta: ${faltas.join(', ')}. `
+    if (docTomador.length === 14 && faltas.length) {
+      const mensagem = `Tomador com CNPJ sem endereço completo — falta: ${faltas.join(', ')}. `
         + 'Complete em Fiscal → Alterar (na linha desta nota) e reenvie. Não foi enviado à prefeitura.';
       await supabase.from('notas_fiscais').update({ status: 'erro', retorno: mensagem }).eq('id', nota.id);
       res.status(200).json({ ok: false, status: 'erro', erro: mensagem, ambiente });

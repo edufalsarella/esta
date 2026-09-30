@@ -74,9 +74,9 @@ const CAMPOS_ENDERECO_TOMADOR = [
 
 /**
  * O que falta no endereço do tomador pro grupo <end> do DPS (todos obrigatórios
- * dentro dele no XSD). Campinas recusa tomador com CPF/CNPJ sem endereço
- * ("L9999 Estado deve ser informado" — o estado sai do município), e a regra
- * nacional exige endereço pra tomador com CNPJ.
+ * dentro dele no XSD). Endereço incompleto não vai no XML. A regra nacional
+ * exige endereço pra tomador com CNPJ; com CPF é opcional (a IMA chegou a
+ * exigir, "L9999 Estado deve ser informado", mas vai deixar de exigir).
  */
 export function faltasEnderecoTomador(tomador = {}) {
   const numerico = new Set(['cep', 'cod_ibge']);

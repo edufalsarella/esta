@@ -1186,7 +1186,7 @@ export default function Patio({ perfil }) {
   /**
    * CPF/CNPJ que já apareceu antes (nota anterior, mensalista, convênio; CNPJ
    * também na Receita — ver src/lib/tomador.js): traz nome e endereço, que
-   * vai junto pra nota (Campinas exige endereço de tomador identificado).
+   * vai junto pra nota (obrigatório com CNPJ, opcional com CPF).
    * Nome já digitado não é sobrescrito.
    */
   async function buscarDadosTomadorDps() {
@@ -1207,9 +1207,9 @@ export default function Patio({ perfil }) {
   function onKeyDownNomeDps(e) {
     if (e.key !== 'Enter') return;
     e.preventDefault();
-    // Tomador identificado sem endereço completo: Enter leva pro CEP, não pra confirmar.
-    const identificado = !validarCpfCnpj(modalDps.documento).vazio && !erroCpfCnpj(modalDps.documento);
-    if (identificado && faltasEnderecoTomador(modalDps.extra || {}).length) inputCepDpsRef.current?.focus();
+    // CNPJ sem endereço completo (obrigatório): Enter leva pro CEP, não pra confirmar.
+    const ehCnpj = validarCpfCnpj(modalDps.documento).tipo === 'CNPJ' && !erroCpfCnpj(modalDps.documento);
+    if (ehCnpj && faltasEnderecoTomador(modalDps.extra || {}).length) inputCepDpsRef.current?.focus();
     else btnConfirmarDpsRef.current?.focus();
   }
 
@@ -2618,13 +2618,14 @@ export default function Patio({ perfil }) {
                 placeholder="Em branco vira &quot;CONSUMIDOR&quot; no documento" />
             </div>
             {modalDps.buscandoTomador && <p className="suave" style={{ fontSize: 12 }}>Procurando dados já cadastrados…</p>}
-            {/* Tomador identificado precisa de endereço (Campinas recusa sem;
-                ver faltasEnderecoTomador). Já vem preenchido quando o
-                documento é conhecido (buscarDadosTomadorDps). */}
+            {/* Endereço do tomador: obrigatório com CNPJ (regra nacional),
+                opcional com CPF. Já vem preenchido quando o documento é
+                conhecido (buscarDadosTomadorDps). */}
             {!validarCpfCnpj(modalDps.documento).vazio && !erroCpfCnpj(modalDps.documento) && (
               <>
                 <p className="suave" style={{ fontSize: 12, margin: '8px 0 4px' }}>
-                  Endereço do tomador{modalDps.origem ? ` (de: ${modalDps.origem})` : ''}
+                  Endereço do tomador{validarCpfCnpj(modalDps.documento).tipo === 'CNPJ' ? ' (obrigatório com CNPJ)' : ' (opcional)'}
+                  {modalDps.origem ? ` — de: ${modalDps.origem}` : ''}
                 </p>
                 <div className="linha-form" style={{ marginBottom: 6 }}>
                   <div className="campo" style={{ width: 120 }}>
@@ -2654,12 +2655,25 @@ export default function Patio({ perfil }) {
                     <input value={modalDps.extra?.bairro || ''} onChange={(e) => setEnderecoDps({ bairro: e.target.value })} />
                   </div>
                 </div>
-                {!modalDps.buscandoTomador && faltasEnderecoTomador(modalDps.extra || {}).length > 0 && (
-                  <p className="aviso" style={{ fontSize: 12 }}>
-                    Falta: {faltasEnderecoTomador(modalDps.extra || {}).join(', ')} — sem o endereço completo a
-                    prefeitura recusa e a nota fica com erro.
-                  </p>
-                )}
+                {!modalDps.buscandoTomador && (() => {
+                  const faltas = faltasEnderecoTomador(modalDps.extra || {});
+                  if (!faltas.length) return null;
+                  if (validarCpfCnpj(modalDps.documento).tipo === 'CNPJ') {
+                    return (
+                      <p className="aviso" style={{ fontSize: 12 }}>
+                        Falta: {faltas.join(', ')} — com CNPJ o endereço completo é obrigatório; sem ele a nota
+                        fica com erro.
+                      </p>
+                    );
+                  }
+                  // CPF: só comenta quando começou a preencher e parou no meio.
+                  const algumPreenchido = ['cep', 'endereco', 'numero', 'bairro'].some((c) => String(modalDps.extra?.[c] || '').trim());
+                  return algumPreenchido && (
+                    <p className="suave" style={{ fontSize: 12 }}>
+                      Endereço incompleto (falta: {faltas.join(', ')}) não vai na nota — complete ou deixe em branco.
+                    </p>
+                  );
+                })()}
               </>
             )}
             <div className="campo" style={{ marginTop: 10 }}>
