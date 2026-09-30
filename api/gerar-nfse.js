@@ -7,7 +7,7 @@
 //   VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY   (já configuradas pro app)
 //   SUPABASE_SERVICE_ROLE_KEY                    (pra ler fiscal_certificados — ver certificado-fiscal.js)
 import { createClient } from '@supabase/supabase-js';
-import { gerarXmlDPS, gerarXmlAbrasfLoteRps, parseAbrasfEnvioResposta, aliquotaIssConfigurada } from '../src/lib/fiscal.js';
+import { gerarXmlDPS, gerarXmlAbrasfLoteRps, parseAbrasfEnvioResposta, aliquotaIssConfigurada, faltasEnderecoTomador } from '../src/lib/fiscal.js';
 import { extrairChaveECertificado, assinarXmlDps, enviarDps, numeroNfseDoRetorno, assinarLoteAbrasf, enviarAbrasf, autoverificarAssinatura, carregarCertificadoDaFilial } from '../src/servidor/nfse.js';
 import { validarXmlDps } from '../src/servidor/validarDps.js';
 
@@ -100,6 +100,19 @@ export default async function handler(req, res) {
         await supabase.from('notas_fiscais').update({ status: 'erro', xml: xmlAssinado, retorno: resposta.corpo }).eq('id', nota.id);
         res.status(200).json({ ok: false, status: 'erro', retorno: resposta.corpo, ambiente });
       }
+      return;
+    }
+
+    // Tomador identificado sem endereço completo: Campinas recusa com CPF ou
+    // CNPJ ("Estado deve ser informado"); a regra nacional exige com CNPJ.
+    // Barra antes, dizendo o que falta, em vez do L9999.
+    const docTomador = String(nota.tomador?.cpf_cnpj || '').replace(/\D/g, '');
+    const faltas = faltasEnderecoTomador(nota.tomador || {});
+    if (docTomador && faltas.length && (padrao !== 'padrao_nacional' || docTomador.length === 14)) {
+      const mensagem = `Tomador com ${docTomador.length === 14 ? 'CNPJ' : 'CPF'} sem endereço completo — falta: ${faltas.join(', ')}. `
+        + 'Complete em Fiscal → Alterar (na linha desta nota) e reenvie. Não foi enviado à prefeitura.';
+      await supabase.from('notas_fiscais').update({ status: 'erro', retorno: mensagem }).eq('id', nota.id);
+      res.status(200).json({ ok: false, status: 'erro', erro: mensagem, ambiente });
       return;
     }
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { gerarXmlDPS } from './fiscal.js';
+import { gerarXmlDPS, faltasEnderecoTomador } from './fiscal.js';
 import { validarXmlDps } from '../servidor/validarDps.js';
 
 // Assinatura de mentira: o XSD só confere a estrutura do <Signature>, não a criptografia.
@@ -10,6 +10,8 @@ const ASSINATURA = '<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><Signe
   + '<Reference URI="#x"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/></Transforms>'
   + '<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>AAAA</DigestValue></Reference>'
   + '</SignedInfo><SignatureValue>AAAA</SignatureValue></Signature>';
+
+const ENDERECO = { cep: '13015-904', cod_ibge: '3509502', endereco: 'Av. Francisco Glicério', numero: '1269', bairro: 'Centro' };
 
 function dps({ cfg = {}, tomador = {}, serie = '1' } = {}) {
   const filial = {
@@ -25,6 +27,8 @@ for (const padrao of ['padrao_nacional_campinas', 'padrao_nacional']) {
     'sem documento': {},
     CPF: { cpf_cnpj: '123.456.789-09', nome: 'Fulano' },
     CNPJ: { cpf_cnpj: '11.222.333/0001-81', nome: 'Empresa X' },
+    'CPF com endereço': { cpf_cnpj: '123.456.789-09', nome: 'Fulano', ...ENDERECO },
+    'CNPJ com endereço': { cpf_cnpj: '11.222.333/0001-81', nome: 'Empresa X', ...ENDERECO },
   })) {
     test(`gerarXmlDPS passa no XSD oficial v1.01 (${padrao}, tomador ${caso})`, async () => {
       const r = await validarXmlDps(dps({ cfg: { padrao }, tomador }));
@@ -42,4 +46,17 @@ test('validarXmlDps: erro de configuração diz o campo e onde corrigir', async 
   const r = await validarXmlDps(dps({ cfg: { codNBS: '1.0604.30.0' } }));
   assert.equal(r.valido, false);
   assert.match(r.erros.join('\n'), /cNBS.*Código NBS \(Configurações → Fiscal\)/);
+});
+
+test('gerarXmlDPS: endereço completo do tomador vai no <end>; incompleto não vai', () => {
+  const completo = dps({ tomador: { cpf_cnpj: '12345678909', nome: 'Fulano', ...ENDERECO } });
+  assert.match(completo, /<toma>[\s\S]*<end>[\s\S]*<cMun>3509502<\/cMun>[\s\S]*<CEP>13015904<\/CEP>[\s\S]*<\/toma>/);
+  const semBairro = dps({ tomador: { cpf_cnpj: '12345678909', nome: 'Fulano', ...ENDERECO, bairro: ' ' } });
+  assert.doesNotMatch(semBairro, /<end>/);
+});
+
+test('faltasEnderecoTomador: lista o que falta', () => {
+  assert.deepEqual(faltasEnderecoTomador({ ...ENDERECO }), []);
+  assert.deepEqual(faltasEnderecoTomador({ cpf_cnpj: '12345678909' }), ['CEP', 'cidade', 'logradouro', 'número', 'bairro']);
+  assert.deepEqual(faltasEnderecoTomador({ ...ENDERECO, cep: '', numero: '  ' }), ['CEP', 'número']);
 });

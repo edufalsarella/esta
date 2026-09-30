@@ -55,6 +55,26 @@ export function aliquotaIssConfigurada(filial) {
     : Number(cfg.perc_iss || 0);
 }
 
+const CAMPOS_ENDERECO_TOMADOR = [
+  ['cep', 'CEP'], ['cod_ibge', 'cidade'], ['endereco', 'logradouro'], ['numero', 'número'], ['bairro', 'bairro'],
+];
+
+/**
+ * O que falta no endereço do tomador pro grupo <end> do DPS (todos obrigatórios
+ * dentro dele no XSD). Campinas recusa tomador com CPF/CNPJ sem endereço
+ * ("L9999 Estado deve ser informado" — o estado sai do município), e a regra
+ * nacional exige endereço pra tomador com CNPJ.
+ */
+export function faltasEnderecoTomador(tomador = {}) {
+  const numerico = new Set(['cep', 'cod_ibge']);
+  return CAMPOS_ENDERECO_TOMADOR
+    .filter(([campo]) => {
+      const v = String(tomador[campo] || '');
+      return numerico.has(campo) ? !v.replace(/\D/g, '') : !v.trim();
+    })
+    .map(([, rotulo]) => rotulo);
+}
+
 /** Monta o XML do DPS (Declaração de Prestação de Serviço), Padrão Nacional v1.01. */
 export function gerarXmlDPS({ nota, filial }) {
   const cfg = filial.config?.nfse || {};
@@ -94,6 +114,17 @@ export function gerarXmlDPS({ nota, filial }) {
       '    <toma>',
       `      <${tagDoc}>${esc(doc)}</${tagDoc}>`,
       `      <xNome>${esc(tomador.nome || 'CONSUMIDOR')}</xNome>`,
+      ...(faltasEnderecoTomador(tomador).length ? [] : [
+        '      <end>',
+        '        <endNac>',
+        `          <cMun>${esc(pad(tomador.cod_ibge, 7))}</cMun>`,
+        `          <CEP>${esc(pad(tomador.cep, 8))}</CEP>`,
+        '        </endNac>',
+        `        <xLgr>${esc(String(tomador.endereco).trim())}</xLgr>`,
+        `        <nro>${esc(String(tomador.numero).trim())}</nro>`,
+        `        <xBairro>${esc(String(tomador.bairro).trim())}</xBairro>`,
+        '      </end>',
+      ]),
       '    </toma>',
     ] : []),
     '    <serv>',
