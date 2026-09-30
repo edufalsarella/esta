@@ -695,12 +695,12 @@ export default function Configuracoes({ perfil }) {
                 )}
               </div>
               <div className="campo" style={{ maxWidth: 180 }}>
-                <label>Código NBS *</label>
+                <label>Código NBS{filial.config?.nfse?.padrao === 'abrasf' ? '' : ' *'}</label>
                 <input value={filial.config?.nfse?.codNBS || ''} disabled={!podeEditar} placeholder="1.0604.30.00"
                   maxLength={12} onChange={(e) => setNfse('codNBS', e.target.value)} />
                 <span className="suave" style={{ fontSize: 11 }}>
                   Nomenclatura Brasileira de Serviços (9 dígitos; pode digitar com os pontos).
-                  Obrigatório no DPS — estacionamento: 1.0604.30.00.
+                  Obrigatório nos padrões nacionais (DPS); o ABRASF não usa — estacionamento: 1.0604.30.00.
                 </span>
                 {filial.config?.nfse?.codNBS
                   ? filial.config.nfse.codNBS.replace(/\D/g, '').length !== 9 && (
@@ -708,7 +708,7 @@ export default function Configuracoes({ perfil }) {
                       Precisa ter 9 dígitos — com outro tamanho o DPS é recusado (L9999).
                     </span>
                   )
-                  : (
+                  : filial.config?.nfse?.padrao !== 'abrasf' && (
                     <span className="aviso" style={{ fontSize: 11 }}>
                       Sem o código NBS o DPS não é enviado.
                     </span>
