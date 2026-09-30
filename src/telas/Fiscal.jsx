@@ -278,9 +278,10 @@ export default function Fiscal({ perfil }) {
                 ? `Enviando ${emLote.feitos}/${emLote.total}…`
                 : `Enviar todos (${pendentesEnvio.length})`}
             </button>
-            {/* Só no ABRASF: no Padrão Nacional o envio já volta autorizado
-                (com a chave da NFS-e), sem protocolo pra consultar depois. */}
-            {ehAbrasf && (
+            {/* Só o ABRASF gera protocolo pra consultar (no Padrão Nacional o
+                envio já volta autorizado). Continua aparecendo depois de a filial
+                trocar de padrão enquanto sobrar lote ABRASF pendente. */}
+            {(ehAbrasf || pendentesConsulta.length > 0) && (
               <button className="btn-primary" disabled={!!emLote || pendentesConsulta.length === 0}
                 onClick={() => rodarEmLote('Consultar todos', pendentesConsulta, '/api/consultar-nfse', (d) => d.status === 'autorizada')}>
                 {emLote?.acao === 'Consultar todos'
