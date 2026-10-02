@@ -50,9 +50,14 @@ export default async function handler(req, res) {
   if (errFilial || !filial) { res.status(500).json({ erro: errFilial?.message || 'Filial não encontrada.' }); return; }
 
   const cfg = filial.config?.semparar || {};
-  if (!cfg.ativo || !cfg.codigoEstabelecimento || !cfg.hash) {
-    // Sem Parar desligado (ou sem configurar) nesta filial — não é erro.
+  if (!cfg.ativo) {
+    // Sem Parar desligado nesta filial — não é erro.
     res.status(200).json({ ok: false, motivo: 'desligado' });
+    return;
+  }
+  if (!cfg.codigoEstabelecimento || !cfg.hash) {
+    const falta = [!cfg.codigoEstabelecimento && 'código do estabelecimento', !cfg.hash && 'hash'].filter(Boolean).join(' e ');
+    res.status(200).json({ ok: false, motivo: 'incompleto', erro: `Sem Parar ligado, mas falta ${falta} em Configurações — a placa não foi autorizada.` });
     return;
   }
 
