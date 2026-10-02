@@ -9,26 +9,10 @@
 // Variáveis de ambiente: mesmas de api/semparar-autoriza.js.
 import { createClient } from '@supabase/supabase-js';
 import { dataHoraLocalISO } from '../src/lib/tempo.js';
+import { erroSemParar, codigoRetorno } from '../src/servidor/semparar.js';
 
 const BASE_PADRAO = 'https://homolog.apisemparar.com.br';
 
-// Códigos de retorno do manual (item 3) — só os que pedem uma frase própria;
-// os demais caem no genérico "Sem Parar recusou (código N)".
-const MOTIVOS = {
-  3: 'Estabelecimento inválido junto ao Sem Parar — confira o código em Configurações.',
-  6: 'Erro genérico do Sem Parar.',
-  12: 'Hash do estabelecimento inválido — confira em Configurações.',
-  14: 'NSU inválido.',
-  17: 'O cliente cancelou o pagamento pelo app Sem Parar — escolha outra forma de pagamento.',
-  57: 'Não autorizado pelo Sem Parar (ou o cancelamento excedeu o prazo).',
-  58: 'Transação não autorizada pelo Sem Parar.',
-  59: 'Token inválido ou vencido — peça pro veículo reentrar no pátio pra gerar um novo.',
-  62: 'Placa inválida junto ao Sem Parar.',
-  63: 'NSU já utilizado — tente de novo.',
-  82: 'Dados inválidos enviados ao Sem Parar.',
-  93: 'Token já utilizado — este veículo já foi cobrado por Sem Parar antes.',
-};
-const motivoDoCodigo = (c) => MOTIVOS[c] || `Sem Parar recusou (código ${c}).`;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ erro: 'Método não suportado.' }); return; }
@@ -79,7 +63,13 @@ export default async function handler(req, res) {
 
     if (!transactionId) {
       if (mov.semparar_status !== 'autorizado') {
-        res.status(400).json({ ok: false, erro: 'Esta placa não tem autorização Sem Parar válida.' });
+        // Explica o porquê — o Autoriza roda em segundo plano na entrada.
+        const porque = {
+          negado: 'o Sem Parar não autorizou esta placa na entrada (sem tag ativa ou não habilitada neste estacionamento)',
+          erro: 'a consulta ao Sem Parar na entrada falhou (veja o aviso que apareceu na entrada)',
+          confirmado: 'esta estadia já foi cobrada pelo Sem Parar',
+        }[mov.semparar_status] || 'a placa não passou pela autorização do Sem Parar na entrada (Sem Parar desligado ou sem chave configurada naquele momento)';
+        res.status(400).json({ ok: false, erro: `Sem Parar indisponível pra esta placa: ${porque}. Escolha outra forma de pagamento.` });
         return;
       }
       const { data: nsuGerado, error: errNsu } = await supabase.rpc('proximo_nsu_semparar', {
@@ -105,13 +95,18 @@ export default async function handler(req, res) {
       });
       const corpoRecebe = await respRecebe.json().catch(() => ({}));
       const dadosRecebe = corpoRecebe?.dados || {};
-      const codigoRecebe = Number(dadosRecebe.codigoRetorno);
+      const codigoRecebe = codigoRetorno(corpoRecebe);
 
       if (codigoRecebe !== 0) {
-        await supabase.from('movimentos').update({
-          semparar_status: codigoRecebe === 17 ? 'negado' : 'erro', semparar_nsu: nsu,
-        }).eq('id', mov.id);
-        res.status(200).json({ ok: false, codigoRetorno: codigoRecebe, erro: motivoDoCodigo(codigoRecebe) });
+        // Só uma recusa com código trava o Sem Parar nesta estadia. Resposta
+        // fora do formato (chave errada, instabilidade) mantém "autorizado"
+        // pra tentar de novo depois de corrigir — cada tentativa usa NSU novo.
+        if (codigoRecebe != null) {
+          await supabase.from('movimentos').update({
+            semparar_status: codigoRecebe === 17 ? 'negado' : 'erro', semparar_nsu: nsu,
+          }).eq('id', mov.id);
+        }
+        res.status(200).json({ ok: false, codigoRetorno: codigoRecebe, erro: erroSemParar(respRecebe.status, corpoRecebe) });
         return;
       }
       transactionId = dadosRecebe.transactionID;
@@ -128,15 +123,14 @@ export default async function handler(req, res) {
       body: JSON.stringify({ transactionID: transactionId }),
     });
     const corpoConfirma = await respConfirma.json().catch(() => ({}));
-    const dadosConfirma = corpoConfirma?.dados || {};
-    const codigoConfirma = Number(dadosConfirma.codigoRetorno);
+    const codigoConfirma = codigoRetorno(corpoConfirma);
 
     // 94 = retransmissão (já confirmado antes) — trata como sucesso, é
     // exatamente o caso de retomar depois de um timeout no Confirma.
     if (codigoConfirma !== 0 && codigoConfirma !== 94) {
       res.status(200).json({
         ok: false, codigoRetorno: codigoConfirma,
-        erro: `Recebido pelo Sem Parar mas a confirmação falhou (${motivoDoCodigo(codigoConfirma)}) — tente de novo, não cobra em dobro.`,
+        erro: `Recebido pelo Sem Parar mas a confirmação falhou — tente de novo, não cobra em dobro. ${erroSemParar(respConfirma.status, corpoConfirma)}`,
       });
       return;
     }

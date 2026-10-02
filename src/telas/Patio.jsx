@@ -526,7 +526,15 @@ export default function Patio({ perfil }) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessao.session?.access_token}` },
           body: JSON.stringify({ movimentoId: novo.id }),
-        }).then(() => recarregar()).catch(() => {});
+        })
+          .then((r) => r.json().catch(() => ({})))
+          .then((d) => {
+            // Placa sem Sem Parar é "autorizado: false" (normal, sem aviso);
+            // só falha de verdade (chave, estabelecimento, comunicação) avisa.
+            if (d?.ok === false && d.erro) setErro(`Sem Parar — entrada ${novo.placa}: ${d.erro}`);
+            recarregar();
+          })
+          .catch(() => {});
       });
     }
     // Serviços marcados antes de dar entrada (ver alternarServicoEntrada) —
@@ -1029,6 +1037,7 @@ export default function Patio({ perfil }) {
   }
 
   async function prepararSaida(mov) {
+    setErro(''); // o card de saída mostra `erro` — não herda aviso de outra operação
     try {
       const servicosSelecionados = await buscarServicosDoMovimento(mov.id);
       const convenioCodigo = mov.convenio_codigo || '';
@@ -1089,6 +1098,7 @@ export default function Patio({ perfil }) {
    * perdido em vez de voltar pro campo Placa, pro operador seguir digitando. */
   function cancelarSaida() {
     setSaindo(null);
+    setErro('');
     focarPlaca();
   }
 
@@ -2524,6 +2534,9 @@ export default function Patio({ perfil }) {
                 </button>
               </p>
             )}
+            {/* O aviso geral da página fica atrás deste card — erro da
+                confirmação (ex.: Sem Parar recusou) tem que aparecer aqui. */}
+            {erro && <p className="aviso">{erro}</p>}
             <div className="linha-form" style={{ justifyContent: 'flex-end' }}>
               <button className="btn-ghost" onClick={cancelarSaida}>Cancelar</button>
               <button className="btn-primary" ref={btnConfirmarSaidaRef}
@@ -2698,6 +2711,7 @@ export default function Patio({ perfil }) {
             {mensalistaExtraPendente && (
               <p className="aviso">Cancela e escolha o mensalista no card da saída antes de confirmar.</p>
             )}
+            {erro && <p className="aviso">{erro}</p>}
             <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
               <button className="btn-ghost" onClick={() => setModalDps(null)}>Cancelar</button>
               {/* Documento em branco é permitido (vira tomador não

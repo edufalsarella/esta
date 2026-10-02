@@ -16,6 +16,7 @@
 //                                                 homologação; troca pra produção quando o
 //                                                 Sem Parar liberar a URL, após a homologação)
 import { createClient } from '@supabase/supabase-js';
+import { erroSemParar, codigoRetorno } from '../src/servidor/semparar.js';
 
 const BASE_PADRAO = 'https://homolog.apisemparar.com.br';
 
@@ -29,7 +30,7 @@ export default async function handler(req, res) {
   if (!movimentoId) { res.status(400).json({ erro: 'movimentoId é obrigatório.' }); return; }
 
   const apiKey = process.env.SEMPARAR_API_KEY;
-  if (!apiKey) { res.status(200).json({ ok: false, motivo: 'sem_api_key' }); return; }
+  if (!apiKey) { res.status(200).json({ ok: false, motivo: 'sem_api_key', erro: 'Sem Parar ligado na filial, mas falta SEMPARAR_API_KEY nas Environment Variables do Vercel.' }); return; }
   const baseUrl = process.env.SEMPARAR_BASE_URL || BASE_PADRAO;
 
   // Client com o token de quem chamou — a RLS por filial já garante que só
@@ -68,15 +69,22 @@ export default async function handler(req, res) {
     });
     const corpo = await resp.json().catch(() => ({}));
     const dados = corpo?.dados || {};
+    // Resposta fora do formato (sem dados.resultadoAnalise — ex.: chave
+    // x-api-key recusada) é ERRO, não "negado": a placa não foi avaliada.
+    if (!resp.ok || dados.resultadoAnalise == null) {
+      await supabase.from('movimentos').update({ semparar_status: 'erro' }).eq('id', mov.id);
+      res.status(200).json({ ok: false, erro: erroSemParar(resp.status, corpo) });
+      return;
+    }
     const autorizado = Number(dados.resultadoAnalise) === 1;
     await supabase.from('movimentos').update({
       semparar_status: autorizado ? 'autorizado' : 'negado',
       semparar_token: dados.token || null,
       semparar_sticker: dados.sticker || null,
     }).eq('id', mov.id);
-    res.status(200).json({ ok: true, autorizado, codigoRetorno: dados.codigoRetorno });
+    res.status(200).json({ ok: true, autorizado, codigoRetorno: codigoRetorno(corpo) });
   } catch (e) {
     await supabase.from('movimentos').update({ semparar_status: 'erro' }).eq('id', movimentoId);
-    res.status(200).json({ ok: false, erro: String(e?.message || e) });
+    res.status(200).json({ ok: false, erro: `Falha de comunicação com o Sem Parar: ${String(e?.message || e)}` });
   }
 }
