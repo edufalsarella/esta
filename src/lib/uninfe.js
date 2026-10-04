@@ -69,8 +69,24 @@ export async function permissaoPasta(handle, pedir = false) {
   return handle.requestPermission(opcoes);
 }
 
+/**
+ * Hora de emissão do DPS pelo relógio do SERVIDOR (cabeçalho Date da
+ * resposta), não do PC da cabine — PC adiantado gera E0008. Um minuto de
+ * folga pra trás cobre a precisão de segundos e o tempo até o UniNFe
+ * processar. Sem resposta, cai no relógio do PC (com a mesma folga).
+ */
+async function horaDeEmissao() {
+  const FOLGA_MS = 60_000;
+  try {
+    const resp = await fetch(`${window.location.origin}/?hora=${Date.now()}`, { method: 'HEAD', cache: 'no-store' });
+    const servidor = Date.parse(resp.headers.get('date') || '');
+    if (!Number.isNaN(servidor)) return servidor - FOLGA_MS;
+  } catch { /* sem rede: usa o relógio do PC */ }
+  return Date.now() - FOLGA_MS;
+}
+
 /** Grava o DPS em Envio — ver uninfeArquivos.js. */
-export const enviarPeloUninfe = (args) => arquivos.enviarPeloUninfe({ ...args, db: supabase });
+export const enviarPeloUninfe = async (args) => arquivos.enviarPeloUninfe({ ...args, db: supabase, agora: await horaDeEmissao() });
 
 /** Lê o retorno do UniNFe e atualiza a nota — ver uninfeArquivos.js. */
 export const verificarRetorno = (args) => arquivos.verificarRetorno({ ...args, db: supabase });

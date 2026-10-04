@@ -101,3 +101,10 @@ test('enviarPeloUninfe: avisa quando falta a subpasta', async () => {
   const raizSemEnvio = pasta('sisparkweb', { Retorno: c.retorno, Erro: c.erro });
   await assert.rejects(enviarPeloUninfe({ raiz: raizSemEnvio, nota, filial, db: c.db }), /Pasta "Envio" não encontrada/);
 });
+
+test('enviarPeloUninfe: dhEmi vem da hora informada (servidor), não do relógio do PC', async () => {
+  const c = cenario();
+  const agora = Date.parse('2026-10-04T16:05:00Z'); // 13:05 em Brasília
+  await enviarPeloUninfe({ raiz: c.raiz, nota, filial, db: c.db, agora });
+  assert.match(c.envio.arquivos.get('R_00000002-env-loterps.xml'), /<dhEmi>2026-10-04T13:05:00-03:00<\/dhEmi>/);
+});

@@ -32,7 +32,7 @@ async function apagar(dir, nome) {
  * (lote = UNINFE:R_xxxxxxxx) até o retorno aparecer (ver verificarRetorno).
  * Devolve { ok, erro }.
  */
-export async function enviarPeloUninfe({ raiz, nota, filial, db }) {
+export async function enviarPeloUninfe({ raiz, nota, filial, db, agora }) {
   // Mesma regra do envio pelo Vercel (api/gerar-nfse.js): alíquota da
   // configuração atual e as conferências de antes do envio.
   const aliquota = aliquotaIssConfigurada(filial);
@@ -54,7 +54,7 @@ export async function enviarPeloUninfe({ raiz, nota, filial, db }) {
   }
   await apagar(erroDir, `${nome}-env-loterps.xml`);
 
-  const xml = gerarXmlDPS({ nota: atual, filial });
+  const xml = gerarXmlDPS({ nota: atual, filial, agora });
   const arquivo = await envio.getFileHandle(`${nome}-env-loterps.xml`, { create: true });
   const escrita = await arquivo.createWritable();
   await escrita.write(xml);

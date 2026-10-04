@@ -27,8 +27,8 @@ export function idInfDps({ filial, nota }) {
 
 // Data/hora local de Brasília em ISO com offset explícito. O Brasil não usa
 // mais horário de verão, então -03:00 fixo é seguro por ora.
-function agoraISOComFuso() {
-  const local = new Date(Date.now() - 3 * 3600000);
+function agoraISOComFuso(agora = Date.now()) {
+  const local = new Date(agora - 3 * 3600000);
   return `${local.toISOString().slice(0, 19)}-03:00`;
 }
 
@@ -109,7 +109,12 @@ export function faltasEnderecoTomador(tomador = {}) {
 }
 
 /** Monta o XML do DPS (Declaração de Prestação de Serviço), Padrão Nacional v1.01. */
-export function gerarXmlDPS({ nota, filial }) {
+/**
+ * `agora` (ms, opcional): hora de emissão (dhEmi). Montando no navegador da
+ * cabine, vem do servidor — relógio do PC adiantado dá "E0008 A data de
+ * emissão da DPS não pode ser posterior à data do seu processamento".
+ */
+export function gerarXmlDPS({ nota, filial, agora }) {
   const cfg = filial.config?.nfse || {};
   const tomador = nota.tomador || {};
   const doc = (tomador.cpf_cnpj || '').replace(/\D/g, '');
@@ -121,7 +126,7 @@ export function gerarXmlDPS({ nota, filial }) {
     '<DPS versao="1.01" xmlns="http://www.sped.fazenda.gov.br/nfse">',
     `  <infDPS Id="${esc(idInfDps({ filial, nota }))}">`,
     `    <tpAmb>${tpAmb}</tpAmb>`,
-    `    <dhEmi>${esc(agoraISOComFuso())}</dhEmi>`,
+    `    <dhEmi>${esc(agoraISOComFuso(agora))}</dhEmi>`,
     '    <verAplic>esta-1.0</verAplic>',
     `    <serie>${esc(nota.serie || cfg.serie || '1')}</serie>`,
     `    <nDPS>${esc(nota.numero_rps || '')}</nDPS>`,
