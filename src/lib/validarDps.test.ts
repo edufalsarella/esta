@@ -60,3 +60,13 @@ test('faltasEnderecoTomador: lista o que falta', () => {
   assert.deepEqual(faltasEnderecoTomador({ cpf_cnpj: '12345678909' }), ['CEP', 'cidade', 'logradouro', 'número', 'bairro']);
   assert.deepEqual(faltasEnderecoTomador({ ...ENDERECO, cep: '', numero: '  ' }), ['CEP', 'número']);
 });
+
+test('IM do prestador: vai no Padrão Nacional Campinas; no federal só com imNoDps', async () => {
+  const campinas = dps({ cfg: { padrao: 'padrao_nacional_campinas' } });
+  const federal = dps({ cfg: { padrao: 'padrao_nacional' } });
+  const federalComIm = dps({ cfg: { padrao: 'padrao_nacional', imNoDps: true } });
+  assert.match(campinas, /<IM>008172390<\/IM>/);
+  assert.doesNotMatch(federal, /<IM>/);
+  assert.match(federalComIm, /<IM>008172390<\/IM>/);
+  assert.equal((await validarXmlDps(federal)).valido, true, 'sem IM continua válido no XSD');
+});

@@ -755,7 +755,19 @@ export default function Configuracoes({ perfil }) {
                   Campinas: Padrão Nacional Campinas desde 01/10/2026 (endereço da IMA); a
                   partir de 01/11/2026 o Simples Nacional passa ao Padrão Nacional (sistema do
                   governo federal). ABRASF só para o que ainda estiver pendente dele.
+                  Enviando pelo UniNFe, o destino é o município configurado na empresa dentro
+                  do UniNFe — deixe os dois iguais.
                 </span>
+                {filial.config?.nfse?.padrao === 'padrao_nacional' && (
+                  <label className="campo-check" style={{ marginTop: 6 }}>
+                    <input type="checkbox" checked={filial.config?.nfse?.imNoDps === true} disabled={!podeEditar}
+                      onChange={(e) => setNfse('imNoDps', e.target.checked)} />
+                    <span style={{ fontSize: 12 }}>
+                      Informar a inscrição municipal no DPS — só se a prefeitura cadastrou a empresa no
+                      cadastro nacional (senão o governo recusa com E0120; se cadastrou e não informar, E0116).
+                    </span>
+                  </label>
+                )}
               </div>
               <div className="campo" style={{ maxWidth: 300 }}>
                 <label>Regime tributário (Simples Nacional)</label>

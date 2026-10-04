@@ -110,6 +110,18 @@ export function faltasEnderecoTomador(tomador = {}) {
 
 /** Monta o XML do DPS (Declaração de Prestação de Serviço), Padrão Nacional v1.01. */
 /**
+ * Inscrição municipal do prestador no DPS. A IMA (Padrão Nacional Campinas)
+ * exige; o Sefin Nacional só aceita se o município registrou dados
+ * complementares da empresa no CNC — senão recusa com "E0120 IM do prestador
+ * não deve ser informado" (e, se registrou, "E0116" exige). Por isso no
+ * Padrão Nacional é opção (config.nfse.imNoDps), desligada por padrão.
+ */
+export function informarImNoDps(cfg = {}) {
+  if (typeof cfg.imNoDps === 'boolean') return cfg.imNoDps;
+  return cfg.padrao !== 'padrao_nacional';
+}
+
+/**
  * `agora` (ms, opcional): hora de emissão (dhEmi). Montando no navegador da
  * cabine, vem do servidor — relógio do PC adiantado dá "E0008 A data de
  * emissão da DPS não pode ser posterior à data do seu processamento".
@@ -135,7 +147,9 @@ export function gerarXmlDPS({ nota, filial, agora }) {
     `    <cLocEmi>${esc(municipio)}</cLocEmi>`,
     '    <prest>',
     `      <CNPJ>${esc((filial.cnpj || '').replace(/\D/g, ''))}</CNPJ>`,
-    `      <IM>${esc((filial.inscricao_mun || '').replace(/\D/g, ''))}</IM>`,
+    ...(informarImNoDps(cfg) && (filial.inscricao_mun || '').replace(/\D/g, '')
+      ? [`      <IM>${esc((filial.inscricao_mun || '').replace(/\D/g, ''))}</IM>`]
+      : []),
     // Sem xNome nem end: com tpEmit=1 (o próprio prestador emite), as regras
     // do Anexo I v1.01 proíbem os dois — o sistema usa o cadastro (CNC). Com
     // o endereço, a IMA devolvia "L9999 Estado deve ser informado".
