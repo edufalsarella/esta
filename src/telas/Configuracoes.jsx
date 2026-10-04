@@ -789,6 +789,21 @@ export default function Configuracoes({ perfil }) {
                     prefeitura pode recusar as notas.
                   </span>
                 )}
+                {filial.config?.nfse?.opSimpNac === '3' && (
+                  <div className="campo" style={{ marginTop: 8 }}>
+                    <label>Regime de apuração no Simples (ME/EPP)</label>
+                    <select value={filial.config?.nfse?.regApTribSN || '1'} disabled={!podeEditar}
+                      onChange={(e) => setNfse('regApTribSN', e.target.value)}>
+                      <option value="1">1 — Tributos federais e municipal pelo Simples</option>
+                      <option value="2">2 — Federais pelo Simples; ISS pela NFS-e (lei municipal)</option>
+                      <option value="3">3 — Federais e municipal pela NFS-e</option>
+                    </select>
+                    <span className="suave" style={{ fontSize: 11 }}>
+                      Obrigatório no Padrão Nacional pra ME/EPP (senão o governo recusa com E0166). O
+                      normal é 1; 2 ou 3 só se a empresa passou de sublimite/limite — confirme com o contador.
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 

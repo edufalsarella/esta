@@ -70,3 +70,12 @@ test('IM do prestador: vai no Padrão Nacional Campinas; no federal só com imNo
   assert.match(federalComIm, /<IM>008172390<\/IM>/);
   assert.equal((await validarXmlDps(federal)).valido, true, 'sem IM continua válido no XSD');
 });
+
+test('regApTribSN: vai pra ME/EPP (padrão 1, ou o configurado) na ordem do XSD; não vai pra MEI/não optante', async () => {
+  const meEpp = dps({ cfg: { opSimpNac: '3' } });
+  assert.match(meEpp, /<opSimpNac>3<\/opSimpNac>\s*<regApTribSN>1<\/regApTribSN>\s*<regEspTrib>/);
+  assert.match(dps({ cfg: { opSimpNac: '3', regApTribSN: '2' } }), /<regApTribSN>2<\/regApTribSN>/);
+  assert.doesNotMatch(dps({ cfg: { opSimpNac: '2' } }), /<regApTribSN>/);
+  assert.doesNotMatch(dps({ cfg: { opSimpNac: '1' } }), /<regApTribSN>/);
+  assert.equal((await validarXmlDps(meEpp)).valido, true);
+});

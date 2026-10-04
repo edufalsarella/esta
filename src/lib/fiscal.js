@@ -155,6 +155,9 @@ export function gerarXmlDPS({ nota, filial, agora }) {
     // o endereço, a IMA devolvia "L9999 Estado deve ser informado".
     '      <regTrib>',
     `        <opSimpNac>${esc(cfg.opSimpNac || '1')}</opSimpNac>`,
+    // ME/EPP (3): o Sefin Nacional exige o regime de apuração (E0166); a IMA
+    // preenchia 1 sozinha. 1 = federais e municipal pelo Simples (o comum).
+    ...(String(cfg.opSimpNac) === '3' ? [`        <regApTribSN>${esc(cfg.regApTribSN || '1')}</regApTribSN>`] : []),
     '        <regEspTrib>0</regEspTrib>',
     '      </regTrib>',
     '    </prest>',
