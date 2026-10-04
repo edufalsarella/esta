@@ -465,6 +465,14 @@ export default function Fiscal({ perfil }) {
                         {enviando === n.id ? 'Enviando…' : (n.status === 'erro' ? 'Reenviar' : 'Enviar')}
                       </button>
                     )}
+                    {/* Nota do UniNFe marcada com erro: o retorno verdadeiro
+                        pode ter chegado depois (ou o erro ser de uma leitura
+                        antiga) — relê a pasta Retorno antes de pensar em reenviar. */}
+                    {n.status === 'erro' && ehNotaUninfe(n) && (
+                      <button className="btn-ghost" disabled={consultando === n.id || !!emLote} onClick={() => consultar(n.id)}>
+                        {consultando === n.id ? 'Lendo…' : 'Ler retorno'}
+                      </button>
+                    )}
                     {n.status === 'enviada' && (
                       <button className="btn-primary" disabled={consultando === n.id || !!emLote} onClick={() => consultar(n.id)}>
                         {consultando === n.id ? 'Consultando…' : 'Consultar'}
