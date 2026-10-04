@@ -30,7 +30,10 @@ async function gunzipBase64(b64) {
  */
 export async function interpretarRetornoUninfe(texto, nomeArquivo) {
   if (/\.err$/i.test(nomeArquivo)) {
-    return { status: 'erro', resumo: `Erro no UniNFe: ${texto.trim().slice(0, 1000)}` };
+    // .err do UniNFe vem em linhas "Campo|valor" (Versão, Message, StackTrace…):
+    // a mensagem útil é a linha Message.
+    const mensagem = texto.match(/^Message\|(.+)$/m)?.[1]?.trim();
+    return { status: 'erro', resumo: `Erro no UniNFe: ${mensagem || texto.trim().slice(0, 1000)}` };
   }
   const erros = errosDoRetorno(texto);
   if (erros.length) return { status: 'erro', resumo: `Recusada: ${erros.join(' · ')}` };

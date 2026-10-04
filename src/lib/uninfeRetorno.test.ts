@@ -44,3 +44,11 @@ test('errosDoRetorno: vários erros', () => {
   const xml = '<temp><erros><Codigo>E1</Codigo><Descricao>A</Descricao></erros><erros><Codigo>E2</Codigo><Descricao>B</Descricao></erros></temp>';
   assert.deepEqual(errosDoRetorno(xml), ['E1 — A', 'E2 — B']);
 });
+
+test('interpretarRetornoUninfe: .err real do UniNFe destaca só a linha Message', async () => {
+  const err = 'Versão UniNFe|5.1.0.154 - 18/06/2026 - 11:30:20\nErrorCode|0000000000\n'
+    + 'Message|A tag para assinatura Rps não existe no XML. (Código do Erro: 5)\nStackTrace|   em Unimake.Business...';
+  const r = await interpretarRetornoUninfe(err, 'R_00000009-ret-loterps.err');
+  assert.equal(r.status, 'erro');
+  assert.equal(r.resumo, 'Erro no UniNFe: A tag para assinatura Rps não existe no XML. (Código do Erro: 5)');
+});
