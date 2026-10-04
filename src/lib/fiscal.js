@@ -68,6 +68,26 @@ export function faltasConfigDps(filial) {
   return faltas;
 }
 
+/**
+ * O que impede de mandar o DPS (mensagem pro operador) ou null. Mesma regra
+ * no envio pelo Vercel (api/gerar-nfse.js) e pelo UniNFe (src/lib/uninfe.js).
+ * Tomador com CNPJ exige endereço completo (regra nacional); com CPF é
+ * opcional (a IMA chegou a exigir, mas anunciou que vai deixar de exigir) e
+ * vai sem endereço se estiver incompleto.
+ */
+export function problemaAntesDeEnviarDps({ nota, filial }) {
+  const faltasConfig = faltasConfigDps(filial);
+  if (faltasConfig.length) {
+    return `Configuração fiscal incompleta — falta: ${faltasConfig.join(', ')}. Preencha em Configurações → Fiscal e reenvie.`;
+  }
+  const doc = String(nota.tomador?.cpf_cnpj || '').replace(/\D/g, '');
+  const faltas = faltasEnderecoTomador(nota.tomador || {});
+  if (doc.length === 14 && faltas.length) {
+    return `Tomador com CNPJ sem endereço completo — falta: ${faltas.join(', ')}. Complete em Fiscal → Alterar (na linha desta nota) e reenvie.`;
+  }
+  return null;
+}
+
 const CAMPOS_ENDERECO_TOMADOR = [
   ['cep', 'CEP'], ['cod_ibge', 'cidade'], ['endereco', 'logradouro'], ['numero', 'número'], ['bairro', 'bairro'],
 ];

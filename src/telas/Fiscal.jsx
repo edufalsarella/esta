@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { fmtBRL, fmtDataBR } from '../lib/tempo.js';
 import { atualizarNotaFiscal } from '../lib/notaFiscal.js';
@@ -11,6 +11,9 @@ import { carregarModelosTicket } from '../lib/dados.js';
 import { montarTicketRps } from '../lib/dadosTicket.js';
 import { TicketModal } from '../componentes/Ticket.jsx';
 import CidadeBusca from '../componentes/CidadeBusca.jsx';
+import {
+  uninfeSuportado, pastaGuardada, escolherPasta, permissaoPasta, enviarPeloUninfe, verificarRetorno, ehNotaUninfe,
+} from '../lib/uninfe.js';
 
 export default function Fiscal({ perfil }) {
   const [notas, setNotas] = useState([]);
@@ -32,6 +35,9 @@ export default function Fiscal({ perfil }) {
   const [erroCnpj, setErroCnpj] = useState('');
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [erroCep, setErroCep] = useState('');
+  const [pastaUninfe, setPastaUninfe] = useState(null); // pasta do UniNFe neste navegador (ver src/lib/uninfe.js)
+  const [permUninfe, setPermUninfe] = useState(null);
+  const verificandoRef = useRef(false);
   const [origemTomador, setOrigemTomador] = useState(''); // de onde vieram os dados auto-preenchidos (ver preencherTomadorCadastrado)
 
   const carregar = useCallback(async () => {
@@ -76,9 +82,75 @@ export default function Fiscal({ perfil }) {
     return { httpOk: resp.ok, httpStatus: resp.status, dados: await resp.json() };
   }
 
+  // --- UniNFe (Configurações → Fiscal → "Enviar pelo UniNFe") ------------
+  // Só nos padrões nacionais: o app grava o DPS sem assinatura na pasta do
+  // UniNFe e lê o retorno — ver src/lib/uninfe.js.
+  const usaUninfe = !!filial?.config?.nfse?.envioUninfe && padrao !== 'abrasf';
+
+  async function conectarPasta() {
+    setErro('');
+    try {
+      let handle = pastaUninfe || await pastaGuardada();
+      if (handle && await permissaoPasta(handle, true) !== 'granted') handle = null;
+      if (!handle) handle = await escolherPasta();
+      setPastaUninfe(handle);
+      setPermUninfe(await permissaoPasta(handle));
+    } catch (e) {
+      if (e?.name !== 'AbortError') setErro(`Não consegui acessar a pasta do UniNFe: ${e.message}`);
+    }
+  }
+
+  async function conectarPastaNova() {
+    setErro('');
+    try {
+      const handle = await escolherPasta();
+      setPastaUninfe(handle);
+      setPermUninfe(await permissaoPasta(handle));
+    } catch (e) {
+      if (e?.name !== 'AbortError') setErro(`Não consegui acessar a pasta do UniNFe: ${e.message}`);
+    }
+  }
+
+  /** Pasta pronta pra uso, ou mensagem de erro já mostrada (devolve null). */
+  function pastaPronta() {
+    if (pastaUninfe && permUninfe === 'granted') return pastaUninfe;
+    setErro('Conecte a pasta do UniNFe (botão "Conectar pasta do UniNFe" acima) antes de enviar.');
+    return null;
+  }
+
+  /** Envia UMA nota pelo caminho certo; { sucesso, erro } pra uso avulso e em lote. */
+  async function enviarNota(nota) {
+    if (usaUninfe) {
+      const raiz = pastaPronta();
+      if (!raiz) return { sucesso: false, erro: 'pasta do UniNFe não conectada' };
+      const r = await enviarPeloUninfe({ raiz, nota, filial });
+      return { sucesso: r.ok, erro: r.erro };
+    }
+    const { httpOk, dados } = await chamarApi('/api/gerar-nfse', nota.id);
+    return { sucesso: httpOk && dados.ok, erro: dados.erro || dados.status };
+  }
+
+  /** Consulta UMA nota: lote do UniNFe lê a pasta Retorno; ABRASF consulta o protocolo. */
+  async function consultarNota(nota) {
+    if (ehNotaUninfe(nota)) {
+      const raiz = pastaPronta();
+      if (!raiz) return { sucesso: false, erro: 'pasta do UniNFe não conectada' };
+      const r = await verificarRetorno({ raiz, nota });
+      return { sucesso: r.status === 'autorizada', erro: r.pronto ? r.resumo : 'UniNFe ainda não devolveu o retorno', r };
+    }
+    const { httpOk, dados } = await chamarApi('/api/consultar-nfse', nota.id);
+    return { sucesso: httpOk && dados.status === 'autorizada', erro: dados.erro || dados.status };
+  }
+
   async function enviar(notaId) {
     setErro(''); setMsg(''); setEnviando(notaId);
     try {
+      if (usaUninfe) {
+        const r = await enviarNota(notas.find((n) => n.id === notaId));
+        if (r.sucesso) setMsg('DPS gravado na pasta Envio do UniNFe — o retorno aparece aqui sozinho quando ele terminar (UniNFe aberto e certificado plugado).');
+        else setErro(r.erro);
+        return;
+      }
       const { httpOk, httpStatus, dados } = await chamarApi('/api/gerar-nfse', notaId);
       if (!httpOk) { setErro(dados.erro || `Falha ao enviar (${httpStatus}).`); return; }
       if (dados.ok && dados.status === 'enviada') setMsg(`Lote enviado — protocolo ${dados.protocolo}. Use "Consultar" pra saber se autorizou.`);
@@ -97,6 +169,15 @@ export default function Fiscal({ perfil }) {
   async function consultar(notaId) {
     setErro(''); setMsg(''); setConsultando(notaId);
     try {
+      const nota = notas.find((n) => n.id === notaId);
+      if (ehNotaUninfe(nota)) {
+        const { r, erro: e } = await consultarNota(nota);
+        if (!r) setErro(e);
+        else if (r.status === 'autorizada') setMsg(`NFS-e${r.numeroNfse ? ` nº ${r.numeroNfse}` : ''} autorizada (pelo UniNFe).`);
+        else if (r.status === 'erro') setErro(`${r.resumo} — veja o retorno na linha da nota.`);
+        else setMsg(r.resumo || 'O UniNFe ainda não devolveu o retorno — confira se ele está aberto e com o certificado plugado.');
+        return;
+      }
       const { httpOk, httpStatus, dados } = await chamarApi('/api/consultar-nfse', notaId);
       if (!httpOk) { setErro(dados.erro || `Falha ao consultar (${httpStatus}).`); return; }
       if (dados.jaInformado) setMsg('Este RPS já tinha virado NFS-e num protocolo anterior — marcado como "IA" (informado anteriormente), não é erro.');
@@ -233,16 +314,16 @@ export default function Fiscal({ perfil }) {
    * e resume no fim quantas deram certo. Não recarrega a lista a cada item —
    * só no final, pra tela não ficar piscando.
    */
-  async function rodarEmLote(acao, fila, rota, ehSucesso) {
+  async function rodarEmLote(acao, fila, executar) {
     setErro(''); setMsg('');
     setEmLote({ acao, feitos: 0, total: fila.length });
     let ok = 0;
     const falhas = [];
     for (const [i, nota] of fila.entries()) {
       try {
-        const { httpOk, dados } = await chamarApi(rota, nota.id);
-        if (httpOk && ehSucesso(dados)) ok++;
-        else falhas.push(`RPS ${nota.numero_rps}: ${dados.erro || dados.status || 'falhou'}`);
+        const { sucesso, erro: e } = await executar(nota);
+        if (sucesso) ok++;
+        else falhas.push(`RPS ${nota.numero_rps}: ${e || 'falhou'}`);
       } catch (e) {
         falhas.push(`RPS ${nota.numero_rps}: ${e.message}`);
       }
@@ -257,6 +338,42 @@ export default function Fiscal({ perfil }) {
   const pendentesEnvio = notas.filter((n) => n.status === 'gerada' || n.status === 'erro');
   const pendentesConsulta = notas.filter((n) => n.status === 'enviada' && n.lote);
   const ehAbrasf = padrao === 'abrasf';
+  const pendentesUninfe = notas.filter((n) => n.status === 'enviada' && ehNotaUninfe(n));
+  const idsPendentesUninfe = pendentesUninfe.map((n) => n.id).join(',');
+
+  // Pasta do UniNFe já escolhida antes neste navegador: reaproveita (a
+  // permissão pode precisar de um clique pra confirmar — ver conectarPasta).
+  useEffect(() => {
+    if (!uninfeSuportado()) return;
+    pastaGuardada().then(async (h) => {
+      if (!h) return;
+      setPastaUninfe(h);
+      setPermUninfe(await permissaoPasta(h));
+    });
+  }, []);
+
+  // Com nota esperando o UniNFe e a pasta liberada, olha o Retorno a cada 5 s.
+  useEffect(() => {
+    if (!idsPendentesUninfe || !pastaUninfe || permUninfe !== 'granted') return undefined;
+    const timer = setInterval(async () => {
+      if (verificandoRef.current) return;
+      verificandoRef.current = true;
+      try {
+        let mudou = false;
+        for (const nota of pendentesUninfe) {
+          const r = await verificarRetorno({ raiz: pastaUninfe, nota });
+          if (r.pronto) mudou = true;
+        }
+        if (mudou) carregar();
+      } catch {
+        // pasta indisponível agora (ex.: permissão revogada) — tenta de novo no próximo ciclo
+      } finally {
+        verificandoRef.current = false;
+      }
+    }, 5000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idsPendentesUninfe, pastaUninfe, permUninfe]);
 
   return (
     <>
@@ -273,7 +390,7 @@ export default function Fiscal({ perfil }) {
           </div>
           <div className="linha-form">
             <button className="btn-primary" disabled={!!emLote || pendentesEnvio.length === 0}
-              onClick={() => rodarEmLote('Enviar todos', pendentesEnvio, '/api/gerar-nfse', (d) => d.ok)}>
+              onClick={() => rodarEmLote('Enviar todos', pendentesEnvio, enviarNota)}>
               {emLote?.acao === 'Enviar todos'
                 ? `Enviando ${emLote.feitos}/${emLote.total}…`
                 : `Enviar todos (${pendentesEnvio.length})`}
@@ -283,7 +400,7 @@ export default function Fiscal({ perfil }) {
                 trocar de padrão enquanto sobrar lote ABRASF pendente. */}
             {(ehAbrasf || pendentesConsulta.length > 0) && (
               <button className="btn-primary" disabled={!!emLote || pendentesConsulta.length === 0}
-                onClick={() => rodarEmLote('Consultar todos', pendentesConsulta, '/api/consultar-nfse', (d) => d.status === 'autorizada')}>
+                onClick={() => rodarEmLote('Consultar todos', pendentesConsulta, consultarNota)}>
                 {emLote?.acao === 'Consultar todos'
                   ? `Consultando ${emLote.feitos}/${emLote.total}…`
                   : `Consultar todos (${pendentesConsulta.length})`}
@@ -291,6 +408,30 @@ export default function Fiscal({ perfil }) {
             )}
           </div>
         </div>
+        {(usaUninfe || pendentesUninfe.length > 0) && (
+          <div className="linha-form" style={{ alignItems: 'center', marginBottom: 8 }}>
+            {!uninfeSuportado() ? (
+              <span className="aviso">O envio pelo UniNFe precisa do Chrome ou do Edge neste computador.</span>
+            ) : pastaUninfe && permUninfe === 'granted' ? (
+              <span className="ok-txt">
+                UniNFe: pasta <strong>{pastaUninfe.name}</strong> conectada
+                {pendentesUninfe.length > 0 && ` — aguardando retorno de ${pendentesUninfe.length} nota(s)`}.
+              </span>
+            ) : (
+              <>
+                <span className="suave">UniNFe: {pastaUninfe ? 'confirme o acesso à pasta neste navegador.' : 'escolha a pasta do UniNFe (ex.: C:\\sisparkweb).'}</span>
+                <button className="btn-ghost" onClick={conectarPasta}>
+                  {pastaUninfe ? 'Permitir acesso à pasta' : 'Conectar pasta do UniNFe'}
+                </button>
+              </>
+            )}
+            {pastaUninfe && permUninfe === 'granted' && (
+              <button className="btn-ghost" onClick={async () => { setPastaUninfe(null); setPermUninfe(null); await conectarPastaNova(); }}>
+                Trocar pasta
+              </button>
+            )}
+          </div>
+        )}
         {erro && <div className="aviso">{erro}{erro.includes('notas_fiscais') && ' — rode a migration 0005_fiscal.sql.'}</div>}
         {msg && <div className="ok-txt">{msg}</div>}
       </div>
@@ -308,7 +449,9 @@ export default function Fiscal({ perfil }) {
                   <td>{fmtBRL(Number(n.valor))}</td><td>{fmtBRL(Number(n.valor_iss))}</td>
                   <td><span className={'status status-' + n.status}>{n.status}</span></td>
                   <td className="mono" style={{ fontSize: 11 }}>
-                    {n.numero_nfse || (n.status === 'enviada' && n.lote ? `protocolo ${n.lote}` : '—')}
+                    {n.numero_nfse || (n.status === 'enviada' && n.lote
+                      ? (ehNotaUninfe(n) ? 'aguardando UniNFe' : `protocolo ${n.lote}`)
+                      : '—')}
                   </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button className="btn-ghost" onClick={() => setXml(n.xml)}>XML</button>

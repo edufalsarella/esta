@@ -729,6 +729,19 @@ export default function Configuracoes({ perfil }) {
                 <span className="suave" style={{ fontSize: 11 }}>Só mude pra Produção depois de validar em Homologação.</span>
               </div>
             </div>
+            <label className="campo-check" style={{ marginBottom: 4 }}>
+              <input type="checkbox" checked={!!filial.config?.nfse?.envioUninfe} disabled={!podeEditar}
+                onChange={(e) => setNfse('envioUninfe', e.target.checked)} />
+              Enviar pelo UniNFe instalado no computador da cabine
+            </label>
+            <p className="suave" style={{ fontSize: 11, marginTop: 0, marginBottom: 10 }}>
+              Para certificado A3 (cartão/token, só assina onde está plugado): o app grava o DPS
+              sem assinatura na pasta do UniNFe (ex.: C:\sisparkweb\Envio) e lê o retorno de
+              C:\sisparkweb\Retorno — o UniNFe assina e transmite. O UniNFe precisa estar aberto e
+              o A3 plugado; a pasta é conectada uma vez em NFS-e/RPS/DPS (Chrome ou Edge). Só nos
+              padrões nacionais; sem marcar, o envio continua pelo servidor, com o certificado A1
+              cadastrado aqui.
+            </p>
             <div className="linha-form" style={{ marginBottom: 10 }}>
               <div className="campo" style={{ maxWidth: 300 }}>
                 <label>Padrão de envio</label>
@@ -739,12 +752,9 @@ export default function Configuracoes({ perfil }) {
                   <option value="abrasf">ABRASF</option>
                 </select>
                 <span className="suave" style={{ fontSize: 11 }}>
-                  Hoje Campinas emite em produção pelo ABRASF — é o que deve ficar
-                  selecionado (campos específicos dele logo abaixo). Padrão Nacional
-                  Campinas o esta também sabe gerar/enviar, mas ainda não entrou em
-                  operação na prefeitura. Padrão Nacional envia o mesmo DPS direto pro
-                  sistema do governo federal (sefin.nfse.gov.br; em homologação,
-                  sefin.producaorestrita.nfse.gov.br) — pra prefeituras já integradas a ele.
+                  Campinas: Padrão Nacional Campinas desde 01/10/2026 (endereço da IMA); a
+                  partir de 01/11/2026 o Simples Nacional passa ao Padrão Nacional (sistema do
+                  governo federal). ABRASF só para o que ainda estiver pendente dele.
                 </span>
               </div>
               <div className="campo" style={{ maxWidth: 300 }}>
