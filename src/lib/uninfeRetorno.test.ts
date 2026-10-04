@@ -52,3 +52,13 @@ test('interpretarRetornoUninfe: .err real do UniNFe destaca só a linha Message'
   assert.equal(r.status, 'erro');
   assert.equal(r.resumo, 'Erro no UniNFe: A tag para assinatura Rps não existe no XML. (Código do Erro: 5)');
 });
+
+test('interpretarRetornoUninfe: sucesso real do UniNFe (Padrão Nacional Campinas) é a própria NFS-e', async () => {
+  // C:\sisparkweb\Retorno\R_00000009-ret-loterps.xml (resumido): o UniNFe devolve o XML da NFS-e autorizada.
+  const xml = '<NFSe versao="1.01" xmlns="http://www.sped.fazenda.gov.br/nfse"><infNFSe Id="NFS35095021247826100000135000000000008526103572012564">'
+    + '<xLocEmi>CAMPINAS</xLocEmi><nNFSe>85</nNFSe><cStat>100</cStat><DPS versao="1.01"><infDPS Id="DPS350950224782610000013510001000000000000009"><nDPS>9</nDPS></infDPS></DPS></infNFSe></NFSe>';
+  const r = await interpretarRetornoUninfe(xml, 'R_00000009-ret-loterps.xml');
+  assert.equal(r.status, 'autorizada');
+  assert.equal(r.numeroNfse, '85');
+  assert.equal(r.chaveAcesso, 'NFS35095021247826100000135000000000008526103572012564');
+});
