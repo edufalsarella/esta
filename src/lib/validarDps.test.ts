@@ -79,3 +79,12 @@ test('regApTribSN: vai pra ME/EPP (padrão 1, ou o configurado) na ordem do XSD;
   assert.doesNotMatch(dps({ cfg: { opSimpNac: '1' } }), /<regApTribSN>/);
   assert.equal((await validarXmlDps(meEpp)).valido, true);
 });
+
+test('pAliq: Campinas sempre manda; federal não manda pra ME/EPP com regime 1 (E0625)', async () => {
+  assert.match(dps({ cfg: { padrao: 'padrao_nacional_campinas', opSimpNac: '3' } }), /<pAliq>5\.00<\/pAliq>/);
+  const federalMeEpp = dps({ cfg: { padrao: 'padrao_nacional', opSimpNac: '3' } });
+  assert.doesNotMatch(federalMeEpp, /<pAliq>/);
+  assert.match(dps({ cfg: { padrao: 'padrao_nacional', opSimpNac: '3', regApTribSN: '2' } }), /<pAliq>/);
+  assert.match(dps({ cfg: { padrao: 'padrao_nacional', opSimpNac: '1' } }), /<pAliq>/);
+  assert.equal((await validarXmlDps(federalMeEpp)).valido, true, 'sem pAliq continua válido no XSD');
+});

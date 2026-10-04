@@ -122,6 +122,18 @@ export function informarImNoDps(cfg = {}) {
 }
 
 /**
+ * Alíquota do ISS (pAliq) no DPS. A IMA (Padrão Nacional Campinas) confere a
+ * alíquota informada. O Sefin Nacional recusa com E0625 quando é ME/EPP
+ * (opSimpNac 3) com ISS apurado pelo Simples (regApTribSN 1) e não retido
+ * (tpRetISSQN 1, o único que o app manda hoje) — lá o sistema calcula.
+ */
+export function informarAliquotaNoDps(cfg = {}) {
+  if (cfg.padrao !== 'padrao_nacional') return true;
+  const meEppPeloSimples = String(cfg.opSimpNac) === '3' && String(cfg.regApTribSN || '1') === '1';
+  return !meEppPeloSimples;
+}
+
+/**
  * `agora` (ms, opcional): hora de emissão (dhEmi). Montando no navegador da
  * cabine, vem do servidor — relógio do PC adiantado dá "E0008 A data de
  * emissão da DPS não pode ser posterior à data do seu processamento".
@@ -202,11 +214,10 @@ export function gerarXmlDPS({ nota, filial, agora }) {
     '        <tribMun>',
     '          <tribISSQN>1</tribISSQN>', // 1 = operação tributável (sem exportação/imunidade/exigibilidade suspensa)
     '          <tpRetISSQN>1</tpRetISSQN>', // 1 = não retido (o próprio prestador recolhe)
-    // tribMun termina em pAliq — nem vBC nem vISSQN pertencem aqui (ambos
-    // rejeitados). A ADN provavelmente calcula o ISS a partir da base ×
-    // alíquota; se precisar declarar o valor, deve estar noutro lugar do
-    // esquema (fora de tribMun) — a confirmar no próximo teste.
-    `          <pAliq>${Number(nota.aliquota_iss || cfg.perc_iss || 0).toFixed(2)}</pAliq>`,
+    // tribMun termina em pAliq — nem vBC nem vISSQN pertencem aqui.
+    ...(informarAliquotaNoDps(cfg)
+      ? [`          <pAliq>${Number(nota.aliquota_iss || cfg.perc_iss || 0).toFixed(2)}</pAliq>`]
+      : []),
     '        </tribMun>',
     '        <tribFed/>', // sem retenção federal — mas o bloco precisa existir mesmo vazio
     '        <totTrib>',
