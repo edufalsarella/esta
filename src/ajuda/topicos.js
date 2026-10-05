@@ -176,6 +176,7 @@ export const TOPICOS = [
         itens: [
           'Tema claro ou escuro.',
           '"Este navegador imprime os pedidos vindos do celular": ligue só na janela aberta pelo atalho da cabine (pdv-cabine.bat).',
+          'O fornecedor baixa os atalhos da cabine (pdv-cabine.bat para Chrome, pdv-cabine-edge.bat para Edge) logo abaixo dessa opção, na hora de instalar o micro.',
           'Impressora Bluetooth: pareie uma impressora térmica para imprimir direto do celular/tablet.',
         ],
       },

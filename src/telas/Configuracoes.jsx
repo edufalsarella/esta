@@ -7,6 +7,27 @@ import { ehFornecedor, ehSupervisor, nfseAtivo } from '../lib/acesso.js';
 import { converterLogo, refazerLogoComPercentual, LARGURA_PAPEL_DOTS, PERCENTUAL_PADRAO } from '../lib/logoTicket.js';
 import CidadeBusca from '../componentes/CidadeBusca.jsx';
 
+/**
+ * Baixa o atalho da cabine (scripts/*.bat) — só pro fornecedor, na hora de
+ * instalar o micro da cabine. Carregado sob demanda (?raw). No repositório
+ * os .bat têm quebra de linha Unix; o cmd do Windows quer CRLF.
+ */
+async function baixarBat(navegador) {
+  const { default: conteudo } = navegador === 'edge'
+    ? await import('../../scripts/pdv-cabine-edge.bat?raw')
+    : await import('../../scripts/pdv-cabine.bat?raw');
+  const nome = navegador === 'edge' ? 'pdv-cabine-edge.bat' : 'pdv-cabine.bat';
+  const blob = new Blob([conteudo.replace(/\r?\n/g, '\r\n')], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nome;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 // Dados do estacionamento (nome/endereço/CNPJ/fiscal). Só o fornecedor altera:
 // são dados com efeito legal e fiscal, e mexer neles é chamado de suporte. A
 // trava não é só desta tela — a policy de UPDATE em `filiais` exige fornecedor
@@ -279,6 +300,18 @@ export default function Configuracoes({ perfil }) {
           numa janela comum, a janela da cabine continua sem escutar os pedidos do celular.
           Quando estiver valendo, aparece <strong>🖨 cabine</strong> no topo da tela.
         </p>
+        {ehFornecedor(perfil) && (
+          <div style={{ marginTop: 8 }}>
+            <p className="suave" style={{ fontSize: 11, margin: '0 0 4px' }}>
+              Atalhos da cabine (só fornecedor) — baixe no micro da cabine e abra com dois cliques,
+              ou crie um atalho na área de trabalho:
+            </p>
+            <div className="linha-form" style={{ gap: 6 }}>
+              <button type="button" className="btn-ghost" onClick={() => baixarBat('chrome')}>Baixar pdv-cabine.bat (Chrome)</button>
+              <button type="button" className="btn-ghost" onClick={() => baixarBat('edge')}>Baixar pdv-cabine-edge.bat (Edge)</button>
+            </div>
+          </div>
+        )}
 
         {suportaBluetooth && (
           <>
