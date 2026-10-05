@@ -114,3 +114,24 @@ test('faltasConfigDps: NBS e regime tributário são obrigatórios no DPS', asyn
   assert.deepEqual(faltasConfigDps({ config: { nfse: { opSimpNac: '3' } } }), ['Código NBS']);
   assert.deepEqual(faltasConfigDps({}), ['Código NBS', 'Regime tributário (Simples Nacional)']);
 });
+
+test('proximoNumeroRps: dois micros ao mesmo tempo nunca pegam o mesmo número', async () => {
+  const { proximoNumeroRps } = await import('./fiscal.js');
+  // Banco de mentira com o contador numa variável; o update só vale se `proximo` ainda bate (como no Postgres).
+  let proximo = 7;
+  const espera = () => new Promise((r) => setTimeout(r, Math.random() * 5));
+  const db = {
+    from: () => ({
+      select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => { const v = proximo; await espera(); return { data: { proximo: v } }; } }) }) }),
+      update: (novo) => ({ eq: () => ({ eq: () => ({ eq: (_c, esperado) => ({ select: async () => {
+        await espera();
+        if (proximo !== esperado) return { data: [], error: null };
+        proximo = novo.proximo;
+        return { data: [{ proximo }], error: null };
+      } }) }) }) }),
+    }),
+  };
+  const numeros = await Promise.all(Array.from({ length: 6 }, () => proximoNumeroRps(db, 'f1', '10001')));
+  assert.equal(new Set(numeros).size, 6, `números repetidos: ${numeros}`);
+  assert.deepEqual([...numeros].sort((a, b) => a - b), [7, 8, 9, 10, 11, 12]);
+});

@@ -237,15 +237,25 @@ export function gerarXmlDPS({ nota, filial, agora }) {
 
 /** Próximo número de RPS por (filial, série) — read-modify-write (1 operador). */
 export async function proximoNumeroRps(supabase, filialId, serie) {
-  const { data } = await supabase.from('fiscal_sequencias')
-    .select('proximo').eq('filial_id', filialId).eq('serie', serie).maybeSingle();
-  if (!data) {
-    await supabase.from('fiscal_sequencias').insert({ filial_id: filialId, serie, proximo: 2 });
-    return 1;
+  // Dois micros gerando nota no mesmo instante pegavam o mesmo número (lê e
+  // depois grava). Agora só fica com o número quem conseguir avançar o
+  // contador A PARTIR dele (update condicionado a proximo = n); quem perder
+  // a corrida tenta de novo com o número seguinte.
+  for (let tentativa = 0; tentativa < 10; tentativa++) {
+    const { data } = await supabase.from('fiscal_sequencias')
+      .select('proximo').eq('filial_id', filialId).eq('serie', serie).maybeSingle();
+    if (!data) {
+      // Primeira nota da série — a chave (filial_id, serie) barra dois inserts.
+      const { error } = await supabase.from('fiscal_sequencias').insert({ filial_id: filialId, serie, proximo: 2 });
+      if (!error) return 1;
+      continue;
+    }
+    const n = data.proximo;
+    const { data: atualizadas, error } = await supabase.from('fiscal_sequencias').update({ proximo: n + 1 })
+      .eq('filial_id', filialId).eq('serie', serie).eq('proximo', n).select('proximo');
+    if (!error && atualizadas?.length) return n;
   }
-  const n = data.proximo;
-  await supabase.from('fiscal_sequencias').update({ proximo: n + 1 }).eq('filial_id', filialId).eq('serie', serie);
-  return n;
+  throw new Error('Não consegui reservar o número do RPS (muitas notas ao mesmo tempo) — tente de novo.');
 }
 
 // ---------------------------------------------------------------------------
