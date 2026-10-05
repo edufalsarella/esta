@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase, configurado } from './lib/supabase.js';
 import Layout from './componentes/Layout.jsx';
@@ -17,6 +17,9 @@ import Usuarios from './telas/Usuarios.jsx';
 import ImportarDbf from './telas/ImportarDbf.jsx';
 import ModelosTicket from './telas/ModelosTicket.jsx';
 import Sobre from './telas/Sobre.jsx';
+
+// Só é baixada quando alguém abre a Ajuda — não pesa nas outras telas.
+const Ajuda = lazy(() => import('./telas/Ajuda.jsx'));
 import PainelFornecedor from './telas/PainelFornecedor.jsx';
 import EscolherFilial from './telas/EscolherFilial.jsx';
 import SenhaMesGate from './telas/SenhaMesGate.jsx';
@@ -105,6 +108,7 @@ function Rotas({ perfil }) {
           <Route path="usuarios" element={<Usuarios perfil={perfil} />} />
           <Route path="modelos-ticket" element={<ModelosTicket perfil={perfil} />} />
           <Route path="importar" element={<ImportarDbf perfil={perfil} />} />
+          <Route path="ajuda" element={<Suspense fallback={<div className="card suave">Carregando a ajuda…</div>}><Ajuda perfil={perfil} /></Suspense>} />
           <Route path="sobre" element={<Sobre />} />
           {/* Fornecedor-only: não existe em acesso.js um terceiro nível pra
               isso (supervisor e fornecedor têm rotasDoPapel === null, sem

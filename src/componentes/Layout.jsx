@@ -37,7 +37,8 @@ const GRUPOS = [
     { to: '/usuarios', rotulo: 'Usuários' },
     { to: '/modelos-ticket', rotulo: 'Modelos de ticket' },
   ]},
-  { titulo: 'Sobre', itens: [
+  { titulo: 'Ajuda', itens: [
+    { to: '/ajuda', rotulo: 'Ajuda' },
     { to: '/sobre', rotulo: 'Sobre' },
   ]},
 ];

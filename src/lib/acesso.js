@@ -14,7 +14,7 @@ export const PAPEIS = {
   fornecedor: 'Fornecedor',
 };
 
-export const ROTAS_OPERADOR = ['/', '/caixa', '/reservas', '/sobre'];
+export const ROTAS_OPERADOR = ['/', '/caixa', '/reservas', '/ajuda', '/sobre'];
 
 // Gerente: o dia a dia de quem toca o pátio e atende o cliente — sem mexer no
 // que afeta cobrança (preços), em quem acessa (usuários) nem no financeiro de
