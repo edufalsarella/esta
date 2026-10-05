@@ -18,7 +18,7 @@ import CidadeBusca from '../componentes/CidadeBusca.jsx';
 // avança o próximo pagamento um mês no cadastro e imprime o comprovante.
 export default function Mensalistas({ perfil }) {
   const [lista, setLista] = useState([]);
-  const [ordenarPor, setOrdenarPor] = useState('codigo'); // 'codigo' (placa) | 'razao' (nome, A-Z)
+  const [ordenarPor, setOrdenarPor] = useState('codigo'); // 'codigo' (placa) | 'razao' (nome, A-Z) | 'vencimento' (próx. pagamento)
   const [sel, setSel] = useState(null); // mensalista cujos veículos aparecem embaixo
   const [editando, setEditando] = useState(null); // objeto no modal de cabeçalho (null = fechado)
   const [recebendo, setRecebendo] = useState(null); // mensalista no modal de recebimento
@@ -39,9 +39,15 @@ export default function Mensalistas({ perfil }) {
   // sem ida ao banco. 'codigo' é a placa do veículo principal na maioria dos
   // cadastros (ver importação do legado), daí valer como "por placa".
   const listaOrdenada = useMemo(() => {
-    const cmp = ordenarPor === 'razao'
-      ? (a, b) => a.razao.localeCompare(b.razao, 'pt-BR', { sensitivity: 'base' })
-      : (a, b) => a.codigo.localeCompare(b.codigo, 'pt-BR', { sensitivity: 'base', numeric: true });
+    const porNome = (a, b) => a.razao.localeCompare(b.razao, 'pt-BR', { sensitivity: 'base' });
+    // Vencimento: o mais antigo (mais atrasado) primeiro; sem data vai pro fim.
+    const porVencimento = (a, b) => {
+      if (!a.proximo_pagamento || !b.proximo_pagamento) return !a.proximo_pagamento - !b.proximo_pagamento || porNome(a, b);
+      return a.proximo_pagamento.localeCompare(b.proximo_pagamento) || porNome(a, b);
+    };
+    const cmp = ordenarPor === 'razao' ? porNome
+      : ordenarPor === 'vencimento' ? porVencimento
+        : (a, b) => a.codigo.localeCompare(b.codigo, 'pt-BR', { sensitivity: 'base', numeric: true });
     return [...lista].sort(cmp);
   }, [lista, ordenarPor]);
 
@@ -124,6 +130,7 @@ export default function Mensalistas({ perfil }) {
               <select value={ordenarPor} onChange={(e) => setOrdenarPor(e.target.value)}>
                 <option value="codigo">Placa/código</option>
                 <option value="razao">Nome (A-Z)</option>
+                <option value="vencimento">Data de vencimento</option>
               </select>
             </div>
             <button className="btn-primary" onClick={() => setEditando({ novo: true })}>+ Novo</button>

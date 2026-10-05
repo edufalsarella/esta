@@ -10,6 +10,7 @@ export const GRUPOS = [
     { to: '/bi', rotulo: 'BI / Painel' },
     { to: '/relatorio-convenios', rotulo: 'Relatório de convênios' },
     { to: '/estatistica', rotulo: 'Estatística' },
+    { to: '/mensalistas-atraso', rotulo: 'Mensalistas em atraso' },
   ]},
   { titulo: 'Cadastros', itens: [
     { to: '/precos', rotulo: 'Tabelas de preço' },

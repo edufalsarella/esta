@@ -23,7 +23,7 @@ export const ROTAS_OPERADOR = ['/', '/caixa', '/reservas', '/ajuda', '/sobre'];
 // saída (pagar/banco).
 export const ROTAS_GERENTE = [
   ...ROTAS_OPERADOR,
-  '/bi', '/relatorio-convenios', '/estatistica', '/mensalistas', '/convenios', '/servicos', '/modelos', '/fiscal', '/receber',
+  '/bi', '/relatorio-convenios', '/estatistica', '/mensalistas-atraso', '/mensalistas', '/convenios', '/servicos', '/modelos', '/fiscal', '/receber',
 ];
 
 export const ehFornecedor = (perfil) => perfil?.papel === 'fornecedor';

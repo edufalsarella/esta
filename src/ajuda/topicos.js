@@ -144,6 +144,22 @@ export const TOPICOS = [
     ],
   },
   {
+    id: 'mensalistas-atraso',
+    titulo: 'Mensalistas em atraso',
+    rota: '/mensalistas-atraso',
+    resumo: 'Lista dos mensalistas com a mensalidade vencida, do menor atraso para o maior.',
+    secoes: [
+      {
+        titulo: 'Quem aparece',
+        texto: ['Mensalistas ativos cujo "Próx. pagamento" (no cadastro de Mensalistas) é igual ou anterior à data de emissão — quem vence no próprio dia aparece com "vence hoje". Mensalista sem data de próximo pagamento ou inativo fica de fora. Ao receber a mensalidade, a data avança um mês e ele sai da lista.'],
+      },
+      {
+        titulo: 'Colunas e impressão',
+        texto: ['Placa (todas as do mensalista), nome, último vencimento e dias em atraso. A data de emissão começa em hoje e pode ser trocada para ver o atraso em outra data. "Imprimir" sai com o cabeçalho do estacionamento e a data de emissão.'],
+      },
+    ],
+  },
+  {
     id: 'fiscal',
     titulo: 'NFS-e / RPS/DPS',
     rota: '/fiscal',
