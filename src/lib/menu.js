@@ -4,9 +4,11 @@ export const GRUPOS = [
   { titulo: 'Operação', itens: [
     { to: '/', rotulo: 'Pátio', fim: true },
     { to: '/caixa', rotulo: 'Caixa' },
+    { to: '/reservas', rotulo: 'Reservas de vaga' },
+  ]},
+  { titulo: 'Relatórios', itens: [
     { to: '/bi', rotulo: 'BI / Painel' },
     { to: '/relatorio-convenios', rotulo: 'Relatório de convênios' },
-    { to: '/reservas', rotulo: 'Reservas de vaga' },
   ]},
   { titulo: 'Cadastros', itens: [
     { to: '/precos', rotulo: 'Tabelas de preço' },
