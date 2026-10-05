@@ -20,6 +20,7 @@ import Sobre from './telas/Sobre.jsx';
 
 // Só é baixada quando alguém abre a Ajuda — não pesa nas outras telas.
 const Ajuda = lazy(() => import('./telas/Ajuda.jsx'));
+const Estatistica = lazy(() => import('./telas/Estatistica.jsx'));
 import PainelFornecedor from './telas/PainelFornecedor.jsx';
 import EscolherFilial from './telas/EscolherFilial.jsx';
 import SenhaMesGate from './telas/SenhaMesGate.jsx';
@@ -90,6 +91,7 @@ function Rotas({ perfil }) {
           <Route path="caixa" element={<Caixa perfil={perfil} />} />
           <Route path="bi" element={<BI perfil={perfil} />} />
           <Route path="relatorio-convenios" element={<RelatorioConvenios perfil={perfil} />} />
+          <Route path="estatistica" element={<Suspense fallback={<div className="card suave">Carregando…</div>}><Estatistica /></Suspense>} />
           <Route path="reservas" element={<Reservas perfil={perfil} />} />
           <Route path="precos" element={<Precos perfil={perfil} />} />
           <Route path="convenios" element={<Convenios perfil={perfil} />} />

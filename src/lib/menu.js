@@ -9,6 +9,7 @@ export const GRUPOS = [
   { titulo: 'Relatórios', itens: [
     { to: '/bi', rotulo: 'BI / Painel' },
     { to: '/relatorio-convenios', rotulo: 'Relatório de convênios' },
+    { to: '/estatistica', rotulo: 'Estatística' },
   ]},
   { titulo: 'Cadastros', itens: [
     { to: '/precos', rotulo: 'Tabelas de preço' },

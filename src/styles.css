@@ -11,6 +11,10 @@
   --erro: #ff6b6b;
   --amarelo: #ffd54f;
   --lateral-bg: #12141a;
+  /* Barra de gráfico (série única). O âmbar da marca (#f5a623) passa da faixa
+     de luminosidade pra marca de dado no escuro; este passou no validador
+     (dataviz validate_palette, superfície #1f232a). */
+  --grafico-barra: #c27e12;
 }
 :root[data-theme="claro"] {
   --bg: #f4f5f7;
@@ -25,6 +29,7 @@
   --erro: #c62f2f;
   --amarelo: #a67c00;
   --lateral-bg: #e9ebef;
+  --grafico-barra: #a8650a; /* = --ambar; passou no validador (superfície #ffffff) */
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--texto); font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }

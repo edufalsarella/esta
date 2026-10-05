@@ -116,6 +116,34 @@ export const TOPICOS = [
     ],
   },
   {
+    id: 'estatistica',
+    titulo: 'Estatística',
+    rota: '/estatistica',
+    resumo: 'Gráficos com a quantidade de veículos por faixa de horário (entradas ou saídas) ou por tempo de permanência.',
+    secoes: [
+      {
+        titulo: 'Filtros',
+        itens: [
+          'De / Até: o período analisado (os botões "Últimos 7/30/90 dias" preenchem as datas).',
+          'Relatório: Entradas, Saídas ou Período (permanência).',
+          'Intervalo: o tamanho de cada faixa — 15, 30 ou 60 minutos. Trocar o intervalo só reagrupa, não busca de novo.',
+        ],
+      },
+      {
+        titulo: 'Entradas e saídas',
+        texto: ['Todos os dias do período são somados num único dia de 24 horas: a coluna das 08:00–08:30, por exemplo, é o total de veículos que entraram (ou saíram) nesse horário em todos os dias. Serve para ver os horários de pico e dimensionar a equipe.'],
+      },
+      {
+        titulo: 'Permanência',
+        texto: ['Quanto tempo cada veículo ficou, das saídas feitas no período, de 0 até a maior permanência. Mostra também a média, a mediana (metade ficou menos que isso) e a maior. Quando há permanências muito longas, o gráfico rola para o lado.'],
+      },
+      {
+        titulo: 'Ler os números',
+        texto: ['Passe o mouse (ou use as setas do teclado) numa coluna para ver a quantidade exata. "Ver como tabela" mostra os mesmos números em lista. Entram avulsos e mensalistas; entradas canceladas ficam de fora.'],
+      },
+    ],
+  },
+  {
     id: 'fiscal',
     titulo: 'NFS-e / RPS/DPS',
     rota: '/fiscal',
