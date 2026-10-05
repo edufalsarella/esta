@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { PAPEIS, ehSupervisor, ehFornecedor } from '../lib/acesso.js';
+import { PAPEIS, ehSupervisor, ehFornecedor, rotasPadraoDoPapel } from '../lib/acesso.js';
+import { GRUPOS, ROTAS_CONFIGURAVEIS } from '../lib/menu.js';
+
+/** Erro ao gravar perfil, com a dica certa se a coluna de telas ainda não existe no banco. */
+function mensagemErroPerfil(error) {
+  return /rotas/.test(error?.message || '')
+    ? `${error.message} — falta aplicar a migration 0059_perfis_rotas.sql no banco.`
+    : error?.message;
+}
 
 /**
  * "AR7 Car Wash" -> "ar7carwash.com.br" — o domínio do e-mail de login segue
@@ -53,6 +61,14 @@ export default function Usuarios({ perfil }) {
       });
       const dados = await resp.json();
       if (!resp.ok) { setErro(dados.erro || `Falha ao criar usuário (${resp.status}).`); return; }
+      if (Array.isArray(u.rotas) && u.papel !== 'fornecedor' && dados.id) {
+        const { error } = await supabase.from('perfis').update({ rotas: u.rotas }).eq('id', dados.id);
+        if (error) {
+          setEditando(null); carregar();
+          setErro(`Usuário criado, mas as telas escolhidas não foram salvas: ${mensagemErroPerfil(error)}`);
+          return;
+        }
+      }
       setEditando(null); setMsg(`Usuário criado — ${u.nome} já pode entrar com ${u.email}.`); carregar();
       return;
     }
@@ -69,12 +85,15 @@ export default function Usuarios({ perfil }) {
       filial_id: perfil.filial_id, nome: u.nome, papel: u.papel || 'operador',
       ativo: u.ativo ?? true,
       ...(emailOriginal ? {} : { email: u.email || null }),
+      // Só manda `rotas` quando o campo existe na linha ou foi usado — antes da
+      // migration 0059 a coluna não existe e mandar quebraria toda edição.
+      ...('rotas' in u ? { rotas: u.papel === 'fornecedor' ? null : u.rotas } : {}),
     };
     const res = u.id
       ? await supabase.from('perfis').update(payload).eq('id', u.id)
       : await supabase.from('perfis').insert({ id: (u.uid || '').trim(), ...payload });
     if (res.error) {
-      setErro(res.error.code === '23505' ? 'Esse UID já tem perfil cadastrado.' : res.error.message);
+      setErro(res.error.code === '23505' ? 'Esse UID já tem perfil cadastrado.' : mensagemErroPerfil(res.error));
       return;
     }
     setEditando(null); carregar();
@@ -121,7 +140,10 @@ export default function Usuarios({ perfil }) {
               <tr key={u.id}>
                 <td>{u.nome}</td>
                 <td>{u.email || '—'}</td>
-                <td>{PAPEIS[u.papel] || u.papel}</td>
+                <td>
+                  {PAPEIS[u.papel] || u.papel}
+                  {Array.isArray(u.rotas) && u.papel !== 'fornecedor' && <span className="suave" style={{ fontSize: 11 }}> · telas escolhidas</span>}
+                </td>
                 <td>{u.ativo ? 'Sim' : 'Não'}</td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {podeEditar && (
@@ -144,7 +166,7 @@ export default function Usuarios({ perfil }) {
 
       {editando && (
         <UsuarioModal inicial={editando.novo ? {} : editando} onSalvar={salvar} dominioEmail={dominioEmail}
-          podeCriarFornecedor={ehFornecedor(perfil)} onFechar={() => setEditando(null)} />
+          podeCriarFornecedor={ehFornecedor(perfil)} perfilAtualId={perfil.id} onFechar={() => setEditando(null)} />
       )}
 
       {trocandoSenha && (
@@ -191,9 +213,58 @@ function TrocarSenhaModal({ usuario, onConfirmar, onFechar }) {
   );
 }
 
-function UsuarioModal({ inicial, onSalvar, podeCriarFornecedor, dominioEmail, onFechar }) {
+/**
+ * "Telas que pode acessar": sem personalizar, segue o papel (rotas = null);
+ * personalizando, as caixinhas começam com o padrão do papel e ficam salvas
+ * no usuário (perfis.rotas — ver 0059_perfis_rotas.sql e acesso.js).
+ */
+function TelasDoUsuario({ papel, rotas, onMudar }) {
+  const personalizado = Array.isArray(rotas);
+  const padrao = rotasPadraoDoPapel(papel);
+  const rotulo = (to) => GRUPOS.flatMap((g) => g.itens).find((i) => i.to === to)?.rotulo || to;
+  const alternar = (to) => onMudar(rotas.includes(to) ? rotas.filter((r) => r !== to) : [...rotas, to]);
+
+  return (
+    <div className="campo" style={{ marginBottom: 10 }}>
+      <label>Telas que pode acessar</label>
+      <label className="campo-check">
+        <input type="checkbox" checked={personalizado} onChange={(e) => onMudar(e.target.checked ? padrao : null)} />
+        Escolher as telas (em vez do padrão do papel)
+      </label>
+      {!personalizado ? (
+        <span className="suave" style={{ fontSize: 11 }}>Padrão do papel: {padrao.map(rotulo).join(', ')}.</span>
+      ) : (
+        <div style={{ marginTop: 4 }}>
+          {GRUPOS.map((g) => {
+            const itens = g.itens.filter((i) => ROTAS_CONFIGURAVEIS.includes(i.to));
+            if (!itens.length) return null;
+            return (
+              <div key={g.titulo} style={{ marginBottom: 6 }}>
+                <div className="suave" style={{ fontSize: 11, textTransform: 'uppercase' }}>{g.titulo}</div>
+                <div className="linha-form" style={{ flexWrap: 'wrap', gap: '2px 14px' }}>
+                  {itens.map((i) => (
+                    <label key={i.to} className="campo-check" style={{ margin: 0 }}>
+                      <input type="checkbox" checked={rotas.includes(i.to)} onChange={() => alternar(i.to)} /> {i.rotulo}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          <span className="suave" style={{ fontSize: 11 }}>
+            Ajuda e Sobre ficam sempre liberados. Ações dentro das telas (ex.: ver o caixa de todos,
+            editar configurações) continuam seguindo o papel.
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UsuarioModal({ inicial, onSalvar, podeCriarFornecedor, dominioEmail, perfilAtualId, onFechar }) {
   const [u, setU] = useState({ modo: 'novo-login', ...inicial });
   const [salvando, setSalvando] = useState(false);
+  const [erroTelas, setErroTelas] = useState('');
   const set = (k, v) => setU((o) => ({ ...o, [k]: v }));
   const criandoLogin = !u.id && u.modo === 'novo-login';
   // Sem nome fantasia configurado, não tem como montar o domínio — cai pro
@@ -202,6 +273,14 @@ function UsuarioModal({ inicial, onSalvar, podeCriarFornecedor, dominioEmail, on
 
   async function enviar(e) {
     e.preventDefault();
+    setErroTelas('');
+    if (Array.isArray(u.rotas) && (u.papel || 'operador') !== 'fornecedor') {
+      if (!u.rotas.length) { setErroTelas('Marque pelo menos uma tela.'); return; }
+      if (u.id && u.id === perfilAtualId && !u.rotas.includes('/usuarios')) {
+        setErroTelas('Você está tirando de si mesmo o acesso a Usuários — não daria mais pra desfazer. Mantenha "Usuários" marcado.');
+        return;
+      }
+    }
     setSalvando(true);
     const payload = usaDominioFixo ? { ...u, email: `${(u.emailLocal || '').trim()}@${dominioEmail}` } : u;
     await onSalvar(payload);
@@ -293,6 +372,10 @@ function UsuarioModal({ inicial, onSalvar, podeCriarFornecedor, dominioEmail, on
               {podeCriarFornecedor && <option value="fornecedor">Fornecedor — todos os estacionamentos</option>}
             </select>
           </div>
+          {(u.papel || 'operador') !== 'fornecedor' && (
+            <TelasDoUsuario papel={u.papel || 'operador'} rotas={u.rotas ?? null} onMudar={(rotas) => set('rotas', rotas)} />
+          )}
+          {erroTelas && <p className="aviso" style={{ fontSize: 12 }}>{erroTelas}</p>}
           {!criandoLogin && (
             <label className="campo-check" style={{ marginBottom: 10 }}>
               <input type="checkbox" checked={u.ativo ?? true} onChange={(e) => set('ativo', e.target.checked)} /> Ativo

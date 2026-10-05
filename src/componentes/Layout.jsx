@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, Navigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
-import { PAPEIS, podeAcessar, ehFornecedor, ehSupervisor, nfseAtivo as calcularNfseAtivo } from '../lib/acesso.js';
+import { PAPEIS, podeAcessar, primeiraRotaPermitida, ehFornecedor, ehSupervisor, nfseAtivo as calcularNfseAtivo } from '../lib/acesso.js';
+import { GRUPOS } from '../lib/menu.js';
 import { trocarFilialAtiva } from '../telas/EscolherFilial.jsx';
 import { imprimePedidosDaCabine } from '../lib/preferenciasNavegador.js';
 import { liberarSessao } from '../telas/SessoesGate.jsx';
@@ -9,39 +10,6 @@ import { imprimirTicket } from './Ticket.jsx';
 
 const INTERVALO_VERIFICACAO_MS = 4000;
 
-const GRUPOS = [
-  { titulo: 'Operação', itens: [
-    { to: '/', rotulo: 'Pátio', fim: true },
-    { to: '/caixa', rotulo: 'Caixa' },
-    { to: '/bi', rotulo: 'BI / Painel' },
-    { to: '/relatorio-convenios', rotulo: 'Relatório de convênios' },
-    { to: '/reservas', rotulo: 'Reservas de vaga' },
-  ]},
-  { titulo: 'Cadastros', itens: [
-    { to: '/precos', rotulo: 'Tabelas de preço' },
-    { to: '/convenios', rotulo: 'Convênios' },
-    { to: '/mensalistas', rotulo: 'Mensalistas' },
-    { to: '/formas', rotulo: 'Formas de pagamento' },
-    { to: '/vagas', rotulo: 'Vagas/boxes' },
-    { to: '/produtos', rotulo: 'Produtos' },
-    { to: '/modelos', rotulo: 'Modelos' },
-    { to: '/servicos', rotulo: 'Serviços' },
-    { to: '/bonus', rotulo: 'Faixas de bônus' },
-    { to: '/importar', rotulo: 'Importar do legado (.dbf)' },
-  ]},
-  { titulo: 'Fiscal', itens: [
-    { to: '/fiscal', rotulo: 'NFS-e / RPS/DPS' },
-  ]},
-  { titulo: 'Configurações', itens: [
-    { to: '/configuracoes', rotulo: 'Dados do estacionamento' },
-    { to: '/usuarios', rotulo: 'Usuários' },
-    { to: '/modelos-ticket', rotulo: 'Modelos de ticket' },
-  ]},
-  { titulo: 'Ajuda', itens: [
-    { to: '/ajuda', rotulo: 'Ajuda' },
-    { to: '/sobre', rotulo: 'Sobre' },
-  ]},
-];
 
 /** Número do cliente (Configurações → Dados do estacionamento) antes do nome. */
 function rotuloFilial(f) {
@@ -145,7 +113,7 @@ export default function Layout({ perfil }) {
   }, [perfil.filial_id]);
 
   if (!podeAcessar(perfil, location.pathname)) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={primeiraRotaPermitida(perfil)} replace />;
   }
 
   const grupos = GRUPOS
@@ -158,7 +126,7 @@ export default function Layout({ perfil }) {
     .filter((g) => g.itens.length > 0);
   // Fornecedor-only: acesso.js não distingue supervisor de fornecedor (os
   // dois têm rotasDoPapel === null), então não dá pra colocar isso no
-  // GRUPOS estático acima — entra à parte, só quando é o fornecedor.
+  // GRUPOS (src/lib/menu.js) — entra à parte, só quando é o fornecedor.
   if (ehFornecedor(perfil)) {
     grupos.push({ titulo: 'Fornecedor', itens: [{ to: '/painel-fornecedor', rotulo: 'Painel de uso' }] });
   }

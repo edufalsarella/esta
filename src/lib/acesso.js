@@ -7,6 +7,8 @@
 // app. A fronteira gerente/supervisor ainda é só de interface (pendência
 // conhecida: exigiria policy por tabela).
 
+import { ROTAS_SEMPRE, ROTAS_CONFIGURAVEIS } from './menu.js';
+
 export const PAPEIS = {
   operador: 'Operador',
   gerente: 'Gerente',
@@ -47,8 +49,25 @@ export function rotasDoPapel(papel) {
  */
 export function podeAcessar(perfil, pathname) {
   if (pathname === '/importar') return ehFornecedor(perfil);
+  if (ROTAS_SEMPRE.includes(pathname)) return true;
+  // Telas escolhidas pro usuário (Usuários → "Telas que pode acessar"),
+  // quando o supervisor personalizou; senão, o padrão do papel. Fornecedor
+  // sempre acessa tudo. Rota fora do menu (ex.: financeiro) segue o papel.
+  if (Array.isArray(perfil?.rotas) && !ehFornecedor(perfil) && ROTAS_CONFIGURAVEIS.includes(pathname)) {
+    return perfil.rotas.includes(pathname);
+  }
   const rotas = rotasDoPapel(perfil?.papel);
   return rotas === null || rotas.includes(pathname);
+}
+
+/** Telas do menu que o papel libera por padrão — ponto de partida das caixinhas em Usuários. */
+export function rotasPadraoDoPapel(papel) {
+  return ROTAS_CONFIGURAVEIS.filter((to) => podeAcessar({ papel }, to));
+}
+
+/** Pra onde mandar quem abriu uma tela sem acesso: a primeira tela liberada do menu. */
+export function primeiraRotaPermitida(perfil) {
+  return ROTAS_CONFIGURAVEIS.find((to) => podeAcessar(perfil, to)) || '/ajuda';
 }
 
 /**
