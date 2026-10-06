@@ -41,7 +41,7 @@ export default function Caixa({ perfil }) {
       // valor_extra: parte deste pagamento que é dívida de avulso já cobrada
       // antes (ver Pátio → Devedor → "Mensalista", 0057_mensalista_extras.sql)
       // — mesmo raciocínio de movimentos.valor_dev, usado no extrato abaixo.
-      supabase.from('mensalista_pagamentos').select('id,valor_pago,valor_extra,forma_pagamento,created_at,mensalistas(razao)').eq('caixa_id', c.id),
+      supabase.from('mensalista_pagamentos').select('id,valor_pago,valor_extra,forma_pagamento,created_at,mensalista_nome,mensalistas(razao)').eq('caixa_id', c.id),
       // Valores antecipados recebidos na ENTRADA neste turno (ver 0039_valor_antecipado.sql)
       // — ligados direto pelo próprio caixa_id do pagamento, não pelo do movimento
       // (que só é gravado na saída, podendo ser um turno diferente).
@@ -178,7 +178,7 @@ export default function Caixa({ perfil }) {
         const extra = Number(p.valor_extra || 0);
         return {
           id: `mens-${p.id}`, quando: new Date(p.created_at), tipo: 'Mensalidade',
-          descricao: p.mensalistas?.razao || '—', forma: descForma[p.forma_pagamento] || p.forma_pagamento,
+          descricao: p.mensalistas?.razao || p.mensalista_nome || '—', forma: descForma[p.forma_pagamento] || p.forma_pagamento,
           // Igual a uma saída: tira a dívida de avulso embutida (valor_extra)
           // do valor da mensalidade em si — ela vai na coluna "Dívida".
           valor: Number(p.valor_pago || 0) - extra,

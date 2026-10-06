@@ -125,7 +125,7 @@ export async function carregarRelatorioCaixa(caixa) {
   const valorFaturado = recebidoSaidas + valorConvenioTotal;
 
   const mensalidades = (mensPagtos || []).map((p) => ({
-    id: p.id, nome: p.mensalistas?.razao || '—', valor: Number(p.valor_pago || 0), forma: p.forma_pagamento,
+    id: p.id, nome: p.mensalistas?.razao || p.mensalista_nome || '—', valor: Number(p.valor_pago || 0), forma: p.forma_pagamento,
   }));
   const mensalidadesTotal = mensalidades.reduce((s, p) => s + p.valor, 0);
   // Parte de mensalidades recebidas neste turno que é dívida de avulso já
@@ -248,7 +248,7 @@ export async function carregarRelatorioCaixa(caixa) {
       const extra = Number(p.valor_extra || 0);
       return {
         id: `mens-${p.id}`, quando: new Date(p.created_at), tipo: 'Mensalidade',
-        descricao: p.mensalistas?.razao || '—', forma: descForma[p.forma_pagamento] || p.forma_pagamento,
+        descricao: p.mensalistas?.razao || p.mensalista_nome || '—', forma: descForma[p.forma_pagamento] || p.forma_pagamento,
         // Igual a uma saída: tira a dívida de avulso embutida (valor_extra) do
         // valor da mensalidade em si — ela vai na coluna "divida".
         valor: Number(p.valor_pago || 0) - extra,

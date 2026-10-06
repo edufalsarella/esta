@@ -417,7 +417,7 @@ export default function BI({ perfil }) {
     }
     const mensalidades = (mensPagtos || []).map((p) => ({
       id: p.id, dt_pagamento: p.dt_pagamento, proximo_pagamento: p.proximo_pagamento,
-      mensalista: p.mensalistas?.razao || '—', valor: Number(p.valor_pago || 0),
+      mensalista: p.mensalistas?.razao || p.mensalista_nome || '—', valor: Number(p.valor_pago || 0),
       forma: descForma[p.forma_pagamento] || p.forma_pagamento,
     }));
     // "Mensalidades recebidas" (lista/total acima) mostra o valor CHEIO pago

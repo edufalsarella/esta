@@ -4,7 +4,7 @@ import { carregarModelosVeiculo } from '../lib/dados.js';
 import { normalizar, REGEX_PLACA } from '../lib/texto.js';
 import { erroCpfCnpj, validarCpfCnpj } from '../lib/documento.js';
 import { buscarCnpj, municipioIbgeDe } from '../lib/cnpj.js';
-import { dentroDoVencimento, fmtDataBR, fmtBRL } from '../lib/tempo.js';
+import { dentroDoVencimento, fmtDataBR, fmtBRL, somarDias } from '../lib/tempo.js';
 import { receberMensalidade, ticketRecebimentoComModelo, descricaoForma } from '../lib/mensalidade.js';
 import { TicketModal } from '../componentes/Ticket.jsx';
 import { ReceberModal } from '../componentes/ReceberMensalidade.jsx';
@@ -161,7 +161,15 @@ export default function Mensalistas({ perfil }) {
                         <span className="status status-cancelada" style={{ marginLeft: 6 }} title="Fora da tolerância — entra como avulso no pátio">Vencida</span>
                       )}
                     </td>
-                    <td>{m.ativo ? 'Sim' : 'Não'}</td>
+                    <td>
+                      {m.ativo ? 'Sim' : 'Não'}
+                      {!m.ativo && m.pacote_encerrado_em && (
+                        <div className="suave" style={{ fontSize: 11 }}
+                          title="Pacote vencido, desativado sozinho. Marque Ativo de novo ou renove o Próx. pagamento pra não ser excluído.">
+                          Pacote encerrado — exclui em {fmtDataBR(somarDias(String(m.pacote_encerrado_em).slice(0, 10), 7))}
+                        </div>
+                      )}
+                    </td>
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <button className="btn-ghost" onClick={(e) => { e.stopPropagation(); setSel(m); setEditando(m); }}>Editar</button>
                       <button className="btn-primary" onClick={(e) => { e.stopPropagation(); setSel(m); setRecebendo(m); }}>Receber</button>
@@ -295,6 +303,12 @@ function HeaderModal({ inicial, onSalvar, onExcluir, onFechar }) {
               <option value="P">Pacote</option>
               <option value="H">Hóspede</option>
             </select>
+            {m.tipo_mens === 'P' && (
+              <span className="suave" style={{ fontSize: 11 }}>
+                Pacote: vale até a data do Próx. pagamento. No dia seguinte é desativado sozinho e, 7 dias
+                depois, excluído (os recebimentos continuam no caixa e no BI). Renovar a data antes disso o reativa.
+              </span>
+            )}
           </div>
           <div className="linha-form" style={{ marginBottom: 10, alignItems: 'flex-end' }}>
             <div className="campo" style={{ flex: 1 }}>
