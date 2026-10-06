@@ -22,7 +22,7 @@ import { buscarCep } from '../lib/cep.js';
 import CidadeBusca from '../componentes/CidadeBusca.jsx';
 import { faltasEnderecoTomador } from '../lib/fiscal.js';
 import { issRetidoDaPlaca, salvarIssRetidoDaPlaca, AR_PARA_ABRASF, ABRASF_PARA_AR } from '../lib/issRetido.js';
-import { ehGerente, nfseAtivo } from '../lib/acesso.js';
+import { ehGerente, ehSupervisor, nfseAtivo } from '../lib/acesso.js';
 import { configInfinitePay, ehCelular, parcelasPossiveis, cobrarNoInfiniteTap } from '../lib/infinitepay.js';
 
 const MENSALISTA = new Set(['I', 'P', 'H']);
@@ -2303,8 +2303,12 @@ export default function Patio({ perfil }) {
                 <label>Convênio (opcional — em branco cobra normal)</label>
                 <select value={saindo.convenioCodigo} onChange={(e) => mudarConvenioSaida(e.target.value)}>
                   <option value="">— Sem convênio —</option>
+                  {/* "Só supervisor" (cadastro do convênio): operador e gerente não
+                      veem na lista — só supervisor/fornecedor. O que já veio
+                      aplicado no movimento continua aparecendo, pra não sumir
+                      da tela de quem só está dando a saída. */}
                   {Object.values(convenios)
-                    .filter((c) => c.ativo && (!c.so_supervisor || ehGerente(perfil)))
+                    .filter((c) => c.ativo && (!c.so_supervisor || ehSupervisor(perfil) || c.codigo === saindo.convenioCodigo))
                     .map((c) => <option key={c.codigo} value={c.codigo}>{c.codigo} · {c.razao}</option>)}
                 </select>
               </div>
