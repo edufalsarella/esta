@@ -98,6 +98,7 @@ export default function Patio({ perfil }) {
   const [avarias, setAvarias] = useState(''); // texto (até 5 linhas de 50) — ver botão "Avarias" na Entrada
   const [modalAvarias, setModalAvarias] = useState(false);
   const [fotosAvarias, setFotosAvarias] = useState(0); // só contador — as fotos não ficam no app, vão pro aparelho
+  const [avariasPatio, setAvariasPatio] = useState(null); // { mov, texto, fotos, salvando, erro } — botão "Avarias" da lista do pátio
   const [valorAntecipado, setValorAntecipado] = useState(''); // pago na entrada, descontado na saída — ver botão "Mais opções" na Entrada
   const [formaAntecipado, setFormaAntecipado] = useState('');
   const [modalAntecipado, setModalAntecipado] = useState(false);
@@ -793,27 +794,18 @@ export default function Patio({ perfil }) {
     setModalValorServicoEntrada(null);
   }
 
-  /** No máximo 5 linhas, 50 caracteres cada — mesmo limite do formulário de papel de sempre. */
-  function limitarAvarias(texto) {
-    return texto.split('\n').slice(0, 5).map((l) => l.slice(0, 50)).join('\n');
-  }
-
   /**
-   * Foto de avaria: NUNCA sobe pro esta — baixa direto pro aparelho de quem
-   * está registrando, identificada por placa+data+hora. Sem servidor, sem
-   * Supabase Storage, sem rastro nenhum no sistema — é assim que foi pedido.
+   * Avarias de um carro que JÁ está no pátio (botão "Avarias" da lista) —
+   * mesmo modal da entrada, mas grava direto no movimento ao salvar.
    */
-  function baixarFotoAvaria(file) {
-    const p = (placa.trim() || 'SEMPLACA').toUpperCase();
-    const agora = new Date();
-    const p2 = (n) => String(n).padStart(2, '0');
-    const carimbo = `${agora.getFullYear()}${p2(agora.getMonth() + 1)}${p2(agora.getDate())}_${p2(agora.getHours())}${p2(agora.getMinutes())}${p2(agora.getSeconds())}`;
-    const url = URL.createObjectURL(file);
-    const a = document.createElement('a');
-    a.href = url; a.download = `${p}_${carimbo}.jpg`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setFotosAvarias((n) => n + 1);
+  async function salvarAvariasDoPatio() {
+    const { mov, texto } = avariasPatio;
+    setAvariasPatio((a) => ({ ...a, salvando: true, erro: '' }));
+    const valor = texto.trim() || null;
+    const { error } = await supabase.from('movimentos').update({ avarias: valor }).eq('id', mov.id);
+    if (error) { setAvariasPatio((a) => ({ ...a, salvando: false, erro: error.message })); return; }
+    setPatio((lista) => lista.map((m) => (m.id === mov.id ? { ...m, avarias: valor } : m)));
+    setAvariasPatio(null);
   }
 
   async function buscarServicosDoMovimento(movimentoId) {
@@ -1642,6 +1634,7 @@ export default function Patio({ perfil }) {
         ['Carro', mov.modelo || '—'],
         ['Tabela', mov.tipo_veic],
         ['Entrada', `${mov.dt_entrada.split('-').reverse().join('/')} ${fmtHora(Number(mov.hr_entrada))}`],
+        ...(mov.avarias ? [['Avarias', mov.avarias]] : []),
         ['Reimpresso por', perfil.nome],
       ],
     }, dadosMovimento({ movimento: mov, operador: perfil.nome })));
@@ -1905,6 +1898,11 @@ export default function Patio({ perfil }) {
                       )}
                       <button className="btn-ghost" onClick={() => segundaVia(m)} title="Cliente perdeu o ticket">2ª via</button>
                       <button
+                        className={m.avarias ? 'btn-servico-ativo' : 'btn-ghost'}
+                        title={m.avarias || 'Registrar avarias deste veículo'}
+                        onClick={() => setAvariasPatio({ mov: m, texto: m.avarias || '', fotos: 0, salvando: false, erro: '' })}
+                      >Avarias</button>
+                      <button
                         className={movimentosComServico.has(m.id) ? 'btn-servico-ativo' : 'btn-ghost'}
                         onClick={() => abrirServicosModal(m)}
                       >Serviço</button>
@@ -2056,43 +2054,26 @@ export default function Patio({ perfil }) {
       )}
 
       {modalAvarias && (
-        <div className="modal-bg" onClick={() => setModalAvarias(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Avarias — <span className="placa mono">{placa.trim().toUpperCase() || '—'}</span></h2>
-            <p className="suave">
-              Texto (até 5 linhas de 50 caracteres) fica salvo no sistema e sai no ticket de
-              entrada. Fotos não ficam salvas aqui — baixam direto pro aparelho, identificadas
-              com placa + data + hora.
-            </p>
-            <div className="campo" style={{ marginBottom: 10 }}>
-              <label>Descrição</label>
-              <textarea rows={5} className="mono" style={{ width: '100%' }}
-                value={avarias} onChange={(e) => setAvarias(limitarAvarias(e.target.value))}
-                placeholder={'Ex.: Risco na porta direita\nAmassado no para-choque traseiro'} />
-              <span className="suave" style={{ fontSize: 11 }}>
-                {avarias.split('\n').length}/5 linhas
-              </span>
-            </div>
-            {/* tabIndex + onKeyDown: sem isso o <label> não entra na ordem de Tab
-                (o <input> real fica display:none, também fora dela) — só clique
-                de mouse abria o seletor de foto/câmera. Depois de aberto, a
-                escolha do arquivo em si é sempre do sistema operacional. */}
-            <label className="btn-ghost" style={{ cursor: 'pointer', display: 'inline-block' }} tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.querySelector('input').click(); } }}>
-              Tirar/anexar foto
-              <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
-                onChange={(e) => { const f = e.target.files[0]; if (f) baixarFotoAvaria(f); e.target.value = ''; }} />
-            </label>
-            {fotosAvarias > 0 && (
-              <span className="suave" style={{ marginLeft: 8, fontSize: 12 }}>
-                {fotosAvarias} foto{fotosAvarias > 1 ? 's' : ''} baixada{fotosAvarias > 1 ? 's' : ''} pro aparelho.
-              </span>
-            )}
-            <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
-              <button className="btn-primary" onClick={() => setModalAvarias(false)}>Fechar</button>
-            </div>
-          </div>
-        </div>
+        <AvariasModal placa={placa} texto={avarias} onTexto={setAvarias}
+          fotos={fotosAvarias} onFoto={() => setFotosAvarias((n) => n + 1)}
+          descricao="Texto (até 5 linhas de 50 caracteres) fica salvo no sistema e sai no ticket de entrada."
+          onFechar={() => setModalAvarias(false)}>
+          <button className="btn-primary" onClick={() => setModalAvarias(false)}>Fechar</button>
+        </AvariasModal>
+      )}
+
+      {avariasPatio && (
+        <AvariasModal placa={avariasPatio.mov.placa} texto={avariasPatio.texto}
+          onTexto={(t) => setAvariasPatio((a) => ({ ...a, texto: t }))}
+          fotos={avariasPatio.fotos} onFoto={() => setAvariasPatio((a) => ({ ...a, fotos: a.fotos + 1 }))}
+          descricao="Veículo já no pátio: o texto (até 5 linhas de 50 caracteres) fica salvo no movimento ao clicar em Salvar."
+          erro={avariasPatio.erro}
+          onFechar={() => setAvariasPatio(null)}>
+          <button className="btn-ghost" onClick={() => setAvariasPatio(null)}>Cancelar</button>
+          <button className="btn-primary" disabled={avariasPatio.salvando} onClick={salvarAvariasDoPatio}>
+            {avariasPatio.salvando ? 'Salvando…' : 'Salvar'}
+          </button>
+        </AvariasModal>
       )}
 
       {modalAntecipado && (
@@ -2737,6 +2718,75 @@ export default function Patio({ perfil }) {
   function removePagto(i) {
     setSaindo((s) => ({ ...s, pagamentos: s.pagamentos.filter((_, j) => j !== i) }));
   }
+}
+
+/** No máximo 5 linhas, 50 caracteres cada — mesmo limite do formulário de papel de sempre. */
+function limitarAvarias(texto) {
+  return texto.split('\n').slice(0, 5).map((l) => l.slice(0, 50)).join('\n');
+}
+
+/**
+ * Foto de avaria: NUNCA sobe pro esta — baixa direto pro aparelho de quem
+ * está registrando, identificada por placa+data+hora. Sem servidor, sem
+ * Supabase Storage, sem rastro nenhum no sistema — é assim que foi pedido.
+ */
+function baixarFotoAvaria(file, placa) {
+  const p = (String(placa || '').trim() || 'SEMPLACA').toUpperCase();
+  const agora = new Date();
+  const p2 = (n) => String(n).padStart(2, '0');
+  const carimbo = `${agora.getFullYear()}${p2(agora.getMonth() + 1)}${p2(agora.getDate())}_${p2(agora.getHours())}${p2(agora.getMinutes())}${p2(agora.getSeconds())}`;
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${p}_${carimbo}.jpg`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/**
+ * Modal de avarias — usado na entrada (texto ainda não salvo, vai junto com
+ * a entrada) e na lista do pátio (salva direto no movimento). `children` são
+ * os botões do rodapé.
+ */
+function AvariasModal({ placa, texto, onTexto, fotos, onFoto, descricao, erro, onFechar, children }) {
+  return (
+    <div className="modal-bg" onClick={onFechar}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h2>Avarias — <span className="placa mono">{String(placa || '').trim().toUpperCase() || '—'}</span></h2>
+        <p className="suave">
+          {descricao} Fotos não ficam salvas aqui — baixam direto pro aparelho, identificadas
+          com placa + data + hora.
+        </p>
+        <div className="campo" style={{ marginBottom: 10 }}>
+          <label>Descrição</label>
+          <textarea rows={5} className="mono" style={{ width: '100%' }}
+            value={texto} onChange={(e) => onTexto(limitarAvarias(e.target.value))}
+            placeholder={'Ex.: Risco na porta direita\nAmassado no para-choque traseiro'} />
+          <span className="suave" style={{ fontSize: 11 }}>
+            {texto.split('\n').length}/5 linhas
+          </span>
+        </div>
+        {/* tabIndex + onKeyDown: sem isso o <label> não entra na ordem de Tab
+            (o <input> real fica display:none, também fora dela) — só clique
+            de mouse abria o seletor de foto/câmera. Depois de aberto, a
+            escolha do arquivo em si é sempre do sistema operacional. */}
+        <label className="btn-ghost" style={{ cursor: 'pointer', display: 'inline-block' }} tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.querySelector('input').click(); } }}>
+          Tirar/anexar foto
+          <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+            onChange={(e) => { const f = e.target.files[0]; if (f) { baixarFotoAvaria(f, placa); onFoto(); } e.target.value = ''; }} />
+        </label>
+        {fotos > 0 && (
+          <span className="suave" style={{ marginLeft: 8, fontSize: 12 }}>
+            {fotos} foto{fotos > 1 ? 's' : ''} baixada{fotos > 1 ? 's' : ''} pro aparelho.
+          </span>
+        )}
+        {erro && <p className="aviso">{erro}</p>}
+        <div className="linha-form" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function rotuloTipo(t) {
