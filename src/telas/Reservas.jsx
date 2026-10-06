@@ -109,6 +109,7 @@ export default function Reservas({ perfil }) {
   const [anoMes, setAnoMes] = useState(anoMesAtual());
   const [tipos, setTipos] = useState([]);
   const [capacidade, setCapacidade] = useState({});
+  const [porTurno, setPorTurno] = useState(false); // filial com vagas de turno (Cadastros → Vagas)
   const [diaSelecionado, setDiaSelecionado] = useState(null);
   const [reservasDoDia, setReservasDoDia] = useState([]);
   const [modalNova, setModalNova] = useState(null);
@@ -151,7 +152,8 @@ export default function Reservas({ perfil }) {
     setCarregando(true); setErro('');
     const primeiro = `${anoMes}-01`;
     const ultimo = celulas.filter(Boolean).at(-1) || primeiro;
-    const [ts, mapa] = await Promise.all([tiposDeVaga(supabase), capacidadePorDia(supabase, primeiro, ultimo)]);
+    const [ts, { mapa, porTurno: pt }] = await Promise.all([tiposDeVaga(supabase), capacidadePorDia(supabase, primeiro, ultimo)]);
+    setPorTurno(pt);
     setTipos(ts);
     setCapacidade(mapa);
     setCarregando(false);
@@ -190,7 +192,7 @@ export default function Reservas({ perfil }) {
     if (!m.tipo) { setErro('Escolha o tipo de vaga.'); return; }
 
     if (!forcar) {
-      const mapa = await capacidadePorDia(supabase, m.data_inicio, m.data_fim);
+      const { mapa } = await capacidadePorDia(supabase, m.data_inicio, m.data_fim);
       const dias = diasSemVaga(mapa, m.tipo, m.data_inicio, m.data_fim, m.periodo);
       if (dias.length) { setModalNova({ ...m, diasSemVaga: dias }); return; }
     }
@@ -269,9 +271,11 @@ export default function Reservas({ perfil }) {
           <div>
             <h2>Reservas de vaga</h2>
             <p className="suave">
-              Por dia, quantas vagas de cada tipo ainda sobram no turno mais cheio (passe o mouse pra ver
-              manhã, tarde e noite). Conta as reservas confirmadas — a integral ocupa os três turnos — e os
-              mensalistas pelo turno contratado; avulsos não entram.
+              {porTurno
+                ? 'Por dia, quantas vagas de cada tipo ainda sobram na manhã (M), tarde (T) e noite (N).'
+                : 'Por dia, quantas vagas de cada tipo ainda sobram no turno mais cheio (passe o mouse pra ver manhã, tarde e noite).'}
+              {' '}Conta as reservas confirmadas — a integral ocupa os três turnos — e os mensalistas pelo
+              turno contratado; avulsos não entram.
             </p>
           </div>
           <button className="btn-primary" onClick={abrirNovaReserva} disabled={!tipos.length}>+ Nova reserva</button>
@@ -303,12 +307,21 @@ export default function Reservas({ perfil }) {
               {dia && (
                 <>
                   <div className="mono" style={{ fontSize: 12 }}>{Number(dia.slice(-2))}</div>
-                  {tipos.map((t) => (
+                  {tipos.map((t) => (porTurno ? (
+                    <div key={t} className="suave" style={{ fontSize: 11 }}>
+                      {tipos.length > 1 && <div>{t}:</div>}
+                      {TURNOS.map((tu, i) => (
+                        <span key={tu} title={ROTULO_TURNO[tu]}>
+                          {i > 0 && ' · '}{tu} <strong style={{ color: corRestante(capacidade[dia]?.[t]?.[tu]) }}>{capacidade[dia]?.[t]?.[tu] ?? '—'}</strong>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
                     <div key={t} className="suave" style={{ fontSize: 11 }}
                       title={capacidade[dia]?.[t] ? TURNOS.map((tu) => `${ROTULO_TURNO[tu]}: ${capacidade[dia][t][tu]}`).join(' · ') : undefined}>
                       {t}: <strong style={{ color: corRestante(restanteDoDia(capacidade, dia, t)) }}>{restanteDoDia(capacidade, dia, t) ?? '—'}</strong>
                     </div>
-                  ))}
+                  )))}
                 </>
               )}
             </div>

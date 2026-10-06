@@ -84,6 +84,11 @@ export function Formas({ perfil }) {
     ]} />;
 }
 
+const OPCOES_TURNO_VAGA = [
+  { valor: 'integral', rotulo: 'Integral' }, { valor: 'manha', rotulo: 'Manhã' },
+  { valor: 'tarde', rotulo: 'Tarde' }, { valor: 'noite', rotulo: 'Noite' },
+];
+
 export function Vagas({ perfil }) {
   // Muda a cada lote criado com sucesso, só pra remontar o Crud e ele
   // recarregar a lista — o Crud não expõe um jeito de forçar reload de fora.
@@ -96,6 +101,8 @@ export function Vagas({ perfil }) {
           { campo: 'codigo', rotulo: 'Código', obrigatorio: true,
             ajuda: 'O prefixo (letras iniciais) define a tabela de preço usada pra calcular o valor proposto da reserva — ex.: "C001" usa a tabela de preço "C".' },
           { campo: 'tipo', rotulo: 'Tipo' },
+          { campo: 'turno', rotulo: 'Turno', tipo: 'select', opcoes: OPCOES_TURNO_VAGA, obrigatorio: true, padrao: 'integral',
+            ajuda: 'Integral: a vaga vale nos três turnos (o normal). Manhã/Tarde/Noite: só naquele turno — pra quem reserva por turno.' },
           { campo: 'ocupada', rotulo: 'Ocupada', tipo: 'bool' },
           { campo: 'placa_atual', rotulo: 'Placa', naTabela: true },
           { campo: 'ativo', rotulo: 'Ativo', tipo: 'bool' },
@@ -114,6 +121,7 @@ export function Vagas({ perfil }) {
  */
 function CadastroLoteVagas({ perfil, onCriado }) {
   const [tipo, setTipo] = useState('');
+  const [turno, setTurno] = useState('integral');
   const [prefixo, setPrefixo] = useState('');
   const [quantidade, setQuantidade] = useState(10);
   const [inicioEm, setInicioEm] = useState(1);
@@ -129,7 +137,7 @@ function CadastroLoteVagas({ perfil, onCriado }) {
     const linhas = Array.from({ length: qte }, (_, i) => ({
       filial_id: perfil.filial_id,
       codigo: `${prefixo}${String(inicio + i).padStart(3, '0')}`,
-      tipo, ativo: true, ocupada: false,
+      tipo, turno, ativo: true, ocupada: false,
     }));
     const { error } = await supabase.from('vagas').insert(linhas);
     setSalvando(false);
@@ -139,7 +147,8 @@ function CadastroLoteVagas({ perfil, onCriado }) {
         : error.message);
       return;
     }
-    setMsg(`${qte} vaga(s) "${tipo}" criada(s): ${linhas[0].codigo}..${linhas.at(-1).codigo}.`);
+    const rotuloTurno = OPCOES_TURNO_VAGA.find((o) => o.valor === turno)?.rotulo;
+    setMsg(`${qte} vaga(s) "${tipo}" (${rotuloTurno}) criada(s): ${linhas[0].codigo}..${linhas.at(-1).codigo}.`);
     onCriado();
   }
 
@@ -153,12 +162,23 @@ function CadastroLoteVagas({ perfil, onCriado }) {
         proposto da reserva (ex.: prefixo "C" → tabela de preço "C") — use o mesmo código da tabela
         que se aplica a esse tipo de vaga.
       </p>
+      <p className="suave">
+        Turno: deixe <strong>Integral</strong> (a vaga vale o dia todo). Só pra quem reserva por turno com
+        uma quantidade de vagas em cada turno: crie um lote por turno com o <strong>mesmo Tipo</strong>
+        (ex.: Tipo "Normal" — 20 Manhã prefixo M, 20 Tarde prefixo T, 20 Noite prefixo N).
+      </p>
       {erro && <div className="aviso">{erro}</div>}
       {msg && <div className="ok-txt">{msg}</div>}
       <form className="linha-form" onSubmit={criarLote}>
         <div className="campo" style={{ flex: 1, minWidth: 140 }}>
           <label>Tipo *</label>
           <input value={tipo} onChange={(e) => setTipo(e.target.value)} placeholder="Coberta" required />
+        </div>
+        <div className="campo" style={{ width: 120 }}>
+          <label>Turno</label>
+          <select value={turno} onChange={(e) => setTurno(e.target.value)}>
+            {OPCOES_TURNO_VAGA.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
+          </select>
         </div>
         <div className="campo" style={{ width: 100 }}>
           <label>Prefixo do código</label>

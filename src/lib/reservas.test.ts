@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { diasSemVaga, calcularCapacidade, restanteDoDia, prefixoTabela, mapaTabelaPorTipo, valorPropostoReserva } from './reservas.js';
+import { diasSemVaga, calcularCapacidade, restanteDoDia, temVagaPorTurno, prefixoTabela, mapaTabelaPorTipo, valorPropostoReserva } from './reservas.js';
 import type { TabelaPreco } from '../../packages/tarifacao/tarifacao.ts';
 
 const livre = (n) => ({ M: n, T: n, N: n });
@@ -99,4 +99,21 @@ test('valorPropostoReserva: 3 diárias corridas', () => {
   };
   const r = valorPropostoReserva(tabelas, 'C', '2026-09-01', '2026-09-03');
   assert.equal(r?.valor, 150);
+});
+
+test('calcularCapacidade: vagas por turno (M/T/N) + integrais somam no turno; temVagaPorTurno', () => {
+  const vagas = [
+    ...Array.from({ length: 3 }, (_, i) => ({ codigo: `M00${i + 1}`, tipo: 'Normal', turno: 'manha' })),
+    ...Array.from({ length: 2 }, (_, i) => ({ codigo: `T00${i + 1}`, tipo: 'Normal', turno: 'tarde' })),
+    { codigo: 'N001', tipo: 'Normal', turno: 'noite' },
+    { codigo: 'X001', tipo: 'Normal', turno: 'integral' },
+  ];
+  const reservas = [{ tipo: 'Normal', periodo: 'tarde', data_inicio: '2026-10-06', data_fim: '2026-10-06' }];
+  const mapa = calcularCapacidade({ vagas, reservas, mensalistas: [] }, '2026-10-06', '2026-10-06');
+  assert.deepEqual(mapa['2026-10-06'].Normal, { M: 4, T: 2, N: 2 });
+  assert.equal(temVagaPorTurno(vagas), true);
+  // Sem a coluna turno (antes da migration 0060) ou tudo integral: igual a antes.
+  assert.equal(temVagaPorTurno([{ codigo: 'C1', tipo: 'Coberta' }, { codigo: 'C2', tipo: 'Coberta', turno: 'integral' }]), false);
+  const semColuna = calcularCapacidade({ vagas: [{ codigo: 'C1', tipo: 'Coberta' }], reservas: [], mensalistas: [] }, '2026-10-06', '2026-10-06');
+  assert.deepEqual(semColuna['2026-10-06'].Coberta, { M: 1, T: 1, N: 1 });
 });

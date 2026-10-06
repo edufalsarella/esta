@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { hojeISO, somarDias, fmtDataBR } from '../lib/tempo.js';
-import { ocupacaoPorTurno, TURNOS, ROTULO_TURNO } from '../lib/ocupacaoTurno.js';
+import { ocupacaoPorTurno, vagasPorTurno, TURNOS, ROTULO_TURNO } from '../lib/ocupacaoTurno.js';
 
 // diaSemana do legado: 1 = domingo … 7 = sábado
 const DIA_SEMANA = ['', 'Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
@@ -14,11 +14,17 @@ function escapeHtml(s) {
 
 const diaMes = (iso) => fmtDataBR(iso).slice(0, 5);
 
+/** "20" quando os três turnos têm a mesma quantidade; senão "M 20 · T 15 · N 10". '' sem vaga cadastrada. */
+function textoVagas(vagas) {
+  if (!vagas || !TURNOS.some((t) => vagas[t] > 0)) return '';
+  return vagas.M === vagas.T && vagas.T === vagas.N ? String(vagas.M) : TURNOS.map((t) => `${t} ${vagas[t]}`).join(' · ');
+}
+
 /**
  * Impressão na bobina de 58mm (mesmo padrão do fechamento de caixa, ver
  * caixaRelatorio.js) — 4 colunas curtas: "Seg 06/10 | M | T | N".
  */
-function imprimir({ dias, de, ate, totalVagas, filial }) {
+function imprimir({ dias, de, ate, vagas, filial }) {
   const cabecalho = filial?.nome_fantasia ? `<div class="nome">${escapeHtml(filial.nome_fantasia)}</div><hr>` : '';
   const linhas = dias.map((l) => `<tr><td>${DIA_SEMANA_CURTO[l.diaSemana]} ${diaMes(l.dia)}</td>`
     + TURNOS.map((t) => `<td class="n">${l[t].total}</td>`).join('') + '</tr>').join('');
@@ -39,7 +45,7 @@ function imprimir({ dias, de, ate, totalVagas, filial }) {
     </style></head><body>
       ${cabecalho}
       <h1>Ocupação por turno</h1>
-      <div class="periodo">${escapeHtml(fmtDataBR(de))} a ${escapeHtml(fmtDataBR(ate))}${totalVagas ? `<br>Vagas: ${totalVagas}` : ''}</div>
+      <div class="periodo">${escapeHtml(fmtDataBR(de))} a ${escapeHtml(fmtDataBR(ate))}${textoVagas(vagas) ? `<br>Vagas: ${escapeHtml(textoVagas(vagas))}` : ''}</div>
       <table>
         <thead><tr><th>Dia</th><th>Manhã</th><th>Tarde</th><th>Noite</th></tr></thead>
         <tbody>${linhas}</tbody>
@@ -65,7 +71,7 @@ function imprimir({ dias, de, ate, totalVagas, filial }) {
 export default function OcupacaoTurno({ perfil }) {
   const [de, setDe] = useState(hojeISO);
   const [ate, setAte] = useState(() => somarDias(hojeISO(), 6));
-  const [dados, setDados] = useState(null); // { de, ate, dias, totalVagas }
+  const [dados, setDados] = useState(null); // { de, ate, dias, vagas: { M, T, N } }
   const [filial, setFilial] = useState(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState('');
@@ -86,12 +92,12 @@ export default function OcupacaoTurno({ perfil }) {
       supabase.from('reservas').select('periodo, data_inicio, data_fim, status')
         .in('status', ['confirmada', 'concluida']).lte('data_inicio', ate).gte('data_fim', de),
       supabase.from('mensalistas').select('ativo, qte_vagas, restr_manha, restr_tarde, restr_noite').eq('ativo', true),
-      supabase.from('vagas').select('id', { count: 'exact', head: true }).eq('ativo', true),
+      supabase.from('vagas').select('*').eq('ativo', true),
     ]).then(([r, m, v]) => {
       if (!ativo) return;
       const falha = r.error || m.error || v.error;
       if (falha) { setErro(falha.message); return; }
-      setDados({ de, ate, dias: ocupacaoPorTurno(r.data, m.data, de, ate), totalVagas: v.count || 0 });
+      setDados({ de, ate, dias: ocupacaoPorTurno(r.data, m.data, de, ate), vagas: vagasPorTurno(v.data) });
     }).finally(() => { if (ativo) setCarregando(false); });
     return () => { ativo = false; };
   }, [de, ate, periodoInvalido, longoDemais]);
@@ -132,7 +138,7 @@ export default function OcupacaoTurno({ perfil }) {
         <div className="card" style={{ opacity: carregando ? 0.5 : 1, transition: 'opacity .2s' }}>
           <p className="suave" style={{ marginTop: 0 }}>
             {fmtDataBR(dados.de)} a {fmtDataBR(dados.ate)}
-            {dados.totalVagas > 0 && <> — {dados.totalVagas} vaga(s) cadastrada(s)</>}
+            {textoVagas(dados.vagas) && <> — vagas cadastradas: {textoVagas(dados.vagas)}</>}
           </p>
           <div className="tabela-scroll">
             <table>
@@ -146,7 +152,7 @@ export default function OcupacaoTurno({ perfil }) {
                     <td><span className="mono">{fmtDataBR(l.dia)}</span> {DIA_SEMANA[l.diaSemana]}</td>
                     {TURNOS.map((t) => {
                       const c = l[t];
-                      const lotado = dados.totalVagas > 0 && c.total >= dados.totalVagas;
+                      const lotado = dados.vagas[t] > 0 && c.total >= dados.vagas[t];
                       return (
                         <td key={t} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
                           title={`${c.reservas} reserva(s) + ${c.mensalistas} mensalista(s)`}>
@@ -161,7 +167,7 @@ export default function OcupacaoTurno({ perfil }) {
             </table>
           </div>
           <p className="suave" style={{ fontSize: 11, marginBottom: 0 }}>
-            R = reservas · M = mensalistas. Em vermelho: turno com todas as vagas cadastradas ocupadas.
+            R = reservas · M = mensalistas. Em vermelho: turno com todas as vagas cadastradas daquele turno ocupadas.
             Reservas canceladas ou "não veio" não contam.
           </p>
         </div>

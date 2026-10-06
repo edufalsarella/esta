@@ -8,7 +8,7 @@
 // padrão de src/lib/fiscal.js/notaFiscal.js.
 import { somarDias, dataDeISO } from './tempo.js';
 import { diaSemanaLegado } from './restricaoMensalista.js';
-import { TURNOS, turnosDaReserva, vagasDoMensalista } from './ocupacaoTurno.js';
+import { TURNOS, turnosDaReserva, turnosDaVaga, vagasDoMensalista } from './ocupacaoTurno.js';
 import { calcularProporcional } from '../../packages/tarifacao/tarifacao.ts';
 
 /**
@@ -35,6 +35,8 @@ export function tipoDoMensalista(m, tipoPorCodigo, tipos) {
 
 /**
  * Vagas que sobram por dia, tipo e turno: `{ [dataISO]: { [tipo]: { M, T, N } } }`.
+ * O total de um tipo num turno é a quantidade de vagas integrais + as daquele
+ * turno (vagas.turno, ver 0060_vagas_turno.sql — sem a coluna, tudo integral).
  * Cada reserva confirmada tira uma vaga dos turnos dela (integral = os três,
  * ver turnosDaReserva) e cada mensalista ativo tira `qte_vagas` dos turnos
  * contratados naquele dia da semana (mesma regra do relatório Ocupação por
@@ -45,7 +47,8 @@ export function calcularCapacidade({ vagas, reservas, mensalistas }, dataInicio,
   const tipoPorCodigo = {};
   for (const v of vagas || []) {
     if (!v.tipo) continue;
-    totalPorTipo[v.tipo] = (totalPorTipo[v.tipo] || 0) + 1;
+    totalPorTipo[v.tipo] ||= { M: 0, T: 0, N: 0 };
+    for (const t of turnosDaVaga(v.turno)) totalPorTipo[v.tipo][t] += 1;
     if (v.codigo) tipoPorCodigo[String(v.codigo).trim().toUpperCase()] = v.tipo;
   }
   const tipos = Object.keys(totalPorTipo);
@@ -64,7 +67,7 @@ export function calcularCapacidade({ vagas, reservas, mensalistas }, dataInicio,
       mapa[dia][tipo] = {};
       for (const t of TURNOS) {
         const mens = (mensPorTipo[tipo] || []).reduce((s, m) => s + vagasDoMensalista(m, t, diaSemana), 0);
-        mapa[dia][tipo][t] = totalPorTipo[tipo] - mens;
+        mapa[dia][tipo][t] = totalPorTipo[tipo][t] - mens;
       }
     }
   }
@@ -79,15 +82,25 @@ export function calcularCapacidade({ vagas, reservas, mensalistas }, dataInicio,
   return mapa;
 }
 
-/** Busca vagas, reservas confirmadas e mensalistas ativos e calcula a capacidade (ver calcularCapacidade). */
+/** A filial cadastrou alguma vaga de turno (não integral)? Aí o calendário mostra manhã/tarde/noite separados. */
+export const temVagaPorTurno = (vagas) => (vagas || []).some((v) => v.turno && v.turno !== 'integral');
+
+/**
+ * Busca vagas, reservas confirmadas e mensalistas ativos e calcula a
+ * capacidade (ver calcularCapacidade). `porTurno`: ver temVagaPorTurno.
+ * Vagas com `*` pra funcionar antes e depois da coluna `turno` existir.
+ */
 export async function capacidadePorDia(supabase, dataInicio, dataFim) {
   const [v, r, m] = await Promise.all([
-    supabase.from('vagas').select('codigo, tipo').eq('ativo', true).not('tipo', 'is', null),
+    supabase.from('vagas').select('*').eq('ativo', true).not('tipo', 'is', null),
     supabase.from('reservas').select('tipo, periodo, data_inicio, data_fim')
       .eq('status', 'confirmada').lte('data_inicio', dataFim).gte('data_fim', dataInicio),
     supabase.from('mensalistas').select('box, ativo, qte_vagas, restr_manha, restr_tarde, restr_noite').eq('ativo', true),
   ]);
-  return calcularCapacidade({ vagas: v.data, reservas: r.data, mensalistas: m.data }, dataInicio, dataFim);
+  return {
+    mapa: calcularCapacidade({ vagas: v.data, reservas: r.data, mensalistas: m.data }, dataInicio, dataFim),
+    porTurno: temVagaPorTurno(v.data),
+  };
 }
 
 /** Menor sobra entre os turnos do dia (o que o calendário mostra) — null sem dado. */

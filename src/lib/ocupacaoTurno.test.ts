@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ocupacaoPorTurno } from './ocupacaoTurno.js';
+import { ocupacaoPorTurno, vagasPorTurno } from './ocupacaoTurno.js';
 
 const R = (periodo, data_inicio, data_fim, status = 'confirmada') => ({ periodo, data_inicio, data_fim, status });
 const totais = (l) => [l.M.total, l.T.total, l.N.total];
@@ -38,4 +38,8 @@ test('ocupacaoPorTurno: mensalista pelo dia/turno contratado, com qte_vagas; sem
   // 05/10 segunda: manhã 2+1, tarde 1 + reserva, noite 1
   assert.deepEqual(totais(dias[1]), [3, 2, 1]);
   assert.deepEqual([dias[1].T.reservas, dias[1].T.mensalistas], [1, 1]);
+});
+
+test('vagasPorTurno: integral conta nos três; sem turno = integral', () => {
+  assert.deepEqual(vagasPorTurno([{ turno: 'manha' }, { turno: 'manha' }, { turno: 'noite' }, { turno: 'integral' }, {}]), { M: 4, T: 2, N: 3 });
 });

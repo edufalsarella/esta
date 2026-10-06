@@ -4,7 +4,8 @@ import CidadeBusca from './CidadeBusca.jsx';
 
 /**
  * CRUD genérico sobre uma tabela do Supabase (RLS isola por filial).
- * `colunas`: [{ campo, rotulo, tipo?('text'|'number'|'bool'|'hora'|'select'|'cidade'), opcoes?, obrigatorio?, naTabela?, noForm?, oculto? }]
+ * `colunas`: [{ campo, rotulo, tipo?('text'|'number'|'bool'|'hora'|'select'|'cidade'), opcoes?, obrigatorio?, naTabela?, noForm?, oculto?, padrao? }]
+ * `padrao`: valor com que o campo já vem preenchido no "+ Novo".
  * `exclusivos`: grupos de campos que não podem conviver, ex.: [['perc_conv','vlr_conv','tab_horas']].
  *   Preencher um zera os outros do grupo — evita a regra silenciosa de qual
  *   deles vence quando mais de um está preenchido.
@@ -78,7 +79,7 @@ export default function Crud({ perfil, titulo, subtitulo, tabela, colunas, ordem
           <h2>{titulo}</h2>
           {subtitulo && <p className="suave">{subtitulo}</p>}
         </div>
-        <button className="btn-primary" onClick={() => setEditando({})}>+ Novo</button>
+        <button className="btn-primary" onClick={() => setEditando(Object.fromEntries(colunas.filter((c) => c.padrao !== undefined).map((c) => [c.campo, c.padrao])))}>+ Novo</button>
       </div>
       {erro && <div className="aviso">{erro}</div>}
       {mostraFerramentas && (

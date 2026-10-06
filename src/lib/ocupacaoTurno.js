@@ -22,6 +22,16 @@ const STATUS_QUE_OCUPA = ['confirmada', 'concluida'];
 /** Turnos (M/T/N) que uma reserva ocupa pelo `periodo` — integral (ou desconhecido) = os três. */
 export const turnosDaReserva = (periodo) => TURNOS_DA_RESERVA[periodo] || TURNOS;
 
+/** Turnos em que uma vaga existe (vagas.turno) — integral, vazio ou desconhecido = os três. */
+export const turnosDaVaga = (turno) => TURNOS_DA_RESERVA[turno] || TURNOS;
+
+/** Quantas vagas existem em cada turno, somando todos os tipos: { M, T, N }. */
+export function vagasPorTurno(vagas) {
+  const total = { M: 0, T: 0, N: 0 };
+  for (const v of vagas || []) for (const t of turnosDaVaga(v.turno)) total[t] += 1;
+  return total;
+}
+
 /** Vagas que o mensalista ocupa no turno nesse dia da semana (0 se não contratado). */
 export function vagasDoMensalista(m, turno, diaSemana) {
   return turnoContratado(turno, diaSemana, m.restr_manha, m.restr_tarde, m.restr_noite) ? Number(m.qte_vagas || 1) : 0;

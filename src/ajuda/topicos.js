@@ -174,7 +174,7 @@ export const TOPICOS = [
       },
       {
         titulo: 'Na tela e na impressão',
-        texto: ['Escolha o período (o botão "Próximos 7 dias" preenche uma semana a partir de hoje). Na tela, cada turno mostra o total e embaixo quanto é de reserva (R) e de mensalista (M); fica em vermelho quando chega ao total de vagas cadastradas. "Imprimir" sai na bobina de 58mm, só com os totais: uma linha por dia (dia da semana e data) e as colunas Manhã, Tarde e Noite.'],
+        texto: ['Escolha o período (o botão "Próximos 7 dias" preenche uma semana a partir de hoje). Na tela, cada turno mostra o total e embaixo quanto é de reserva (R) e de mensalista (M); fica em vermelho quando chega ao total de vagas daquele turno (vagas Integrais + as do turno, ver Cadastros → Vagas/boxes). "Imprimir" sai na bobina de 58mm, só com os totais: uma linha por dia (dia da semana e data) e as colunas Manhã, Tarde e Noite.'],
       },
     ],
   },
