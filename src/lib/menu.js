@@ -11,6 +11,7 @@ export const GRUPOS = [
     { to: '/relatorio-convenios', rotulo: 'Relatório de convênios' },
     { to: '/estatistica', rotulo: 'Estatística' },
     { to: '/mensalistas-atraso', rotulo: 'Mensalistas em atraso' },
+    { to: '/ocupacao-turno', rotulo: 'Ocupação por turno' },
   ]},
   { titulo: 'Cadastros', itens: [
     { to: '/precos', rotulo: 'Tabelas de preço' },

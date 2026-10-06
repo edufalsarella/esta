@@ -7,6 +7,7 @@ import Caixa from './telas/Caixa.jsx';
 import BI from './telas/BI.jsx';
 import RelatorioConvenios from './telas/RelatorioConvenios.jsx';
 import MensalistasAtraso from './telas/MensalistasAtraso.jsx';
+import OcupacaoTurno from './telas/OcupacaoTurno.jsx';
 import Reservas from './telas/Reservas.jsx';
 import Precos from './telas/Precos.jsx';
 import { Convenios, Formas, Vagas, Produtos, Modelos, Servicos, Bonus } from './telas/cadastros.jsx';
@@ -93,6 +94,7 @@ function Rotas({ perfil }) {
           <Route path="bi" element={<BI perfil={perfil} />} />
           <Route path="relatorio-convenios" element={<RelatorioConvenios perfil={perfil} />} />
           <Route path="mensalistas-atraso" element={<MensalistasAtraso perfil={perfil} />} />
+          <Route path="ocupacao-turno" element={<OcupacaoTurno perfil={perfil} />} />
           <Route path="estatistica" element={<Suspense fallback={<div className="card suave">Carregando…</div>}><Estatistica /></Suspense>} />
           <Route path="reservas" element={<Reservas perfil={perfil} />} />
           <Route path="precos" element={<Precos perfil={perfil} />} />

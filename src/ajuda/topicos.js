@@ -160,6 +160,25 @@ export const TOPICOS = [
     ],
   },
   {
+    id: 'ocupacao-turno',
+    titulo: 'Ocupação por turno',
+    rota: '/ocupacao-turno',
+    resumo: 'Quantas vagas estão ocupadas em cada dia, na manhã, tarde e noite — reservas mais mensalistas. Impresso na bobina.',
+    secoes: [
+      {
+        titulo: 'O que entra na conta',
+        itens: [
+          'Reservas confirmadas e concluídas: a reserva Integral (dia todo) conta nos três turnos; Manhã, Tarde ou Noite contam só no próprio turno. Canceladas e "Não veio" ficam de fora.',
+          'Mensalistas ativos, pela quantidade de vagas contratadas, em cada turno contratado naquele dia da semana (Mensalistas → Editar → dia/turno contratado). Mensalista sem restrição de turno conta nos três turnos, todos os dias.',
+        ],
+      },
+      {
+        titulo: 'Na tela e na impressão',
+        texto: ['Escolha o período (o botão "Próximos 7 dias" preenche uma semana a partir de hoje). Na tela, cada turno mostra o total e embaixo quanto é de reserva (R) e de mensalista (M); fica em vermelho quando chega ao total de vagas cadastradas. "Imprimir" sai na bobina de 58mm, só com os totais: uma linha por dia (dia da semana e data) e as colunas Manhã, Tarde e Noite.'],
+      },
+    ],
+  },
+  {
     id: 'fiscal',
     titulo: 'NFS-e / RPS/DPS',
     rota: '/fiscal',

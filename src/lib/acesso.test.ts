@@ -30,7 +30,7 @@ test('podeAcessar: rota fora do menu (financeiro) segue o papel mesmo com lista'
 });
 
 test('rotasPadraoDoPapel e primeiraRotaPermitida', () => {
-  assert.deepEqual(rotasPadraoDoPapel('operador'), ['/', '/caixa', '/reservas']);
+  assert.deepEqual(rotasPadraoDoPapel('operador'), ['/', '/caixa', '/reservas', '/ocupacao-turno']);
   assert.equal(primeiraRotaPermitida({ papel: 'operador', rotas: ['/fiscal'] }), '/fiscal');
   assert.equal(primeiraRotaPermitida({ papel: 'operador', rotas: [] }), '/ajuda');
 });

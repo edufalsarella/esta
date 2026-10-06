@@ -8,7 +8,7 @@ import { TicketModal } from '../componentes/Ticket.jsx';
 import AbrirCaixaInline from '../componentes/AbrirCaixaInline.jsx';
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-const ROTULO_PERIODO = { dia_todo: 'Dia todo', manha: 'Manhã', tarde: 'Tarde', noite: 'Noite' };
+const ROTULO_PERIODO = { dia_todo: 'Integral (dia todo)', manha: 'Manhã', tarde: 'Tarde', noite: 'Noite' };
 const ROTULO_STATUS = { confirmada: 'Confirmada', cancelada: 'Cancelada', no_show: 'Não veio', concluida: 'Concluída' };
 
 /** Quantidade de reservas por tipo (ordem alfabética), pro rodapé da lista/relatório do dia. */
