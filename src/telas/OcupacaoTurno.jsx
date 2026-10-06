@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { hojeISO, somarDias, fmtDataBR } from '../lib/tempo.js';
 import { ocupacaoPorTurno, vagasPorTurno, TURNOS, ROTULO_TURNO } from '../lib/ocupacaoTurno.js';
@@ -20,14 +20,24 @@ function textoVagas(vagas) {
   return vagas.M === vagas.T && vagas.T === vagas.N ? String(vagas.M) : TURNOS.map((t) => `${t} ${vagas[t]}`).join(' · ');
 }
 
+/** Vagas livres no turno (vagas cadastradas − ocupadas); null sem vaga cadastrada naquele turno. */
+function livresNoTurno(vagas, turno, ocupadas) {
+  return vagas?.[turno] > 0 ? vagas[turno] - ocupadas : null;
+}
+
 /**
  * Impressão na bobina de 58mm (mesmo padrão do fechamento de caixa, ver
- * caixaRelatorio.js) — 4 colunas curtas: "Seg 06/10 | M | T | N".
+ * caixaRelatorio.js) — dia + Livres/Ocupadas de cada turno. Bobina térmica
+ * não tem cor: turno lotado sai em negrito.
  */
 function imprimir({ dias, de, ate, vagas, filial }) {
   const cabecalho = filial?.nome_fantasia ? `<div class="nome">${escapeHtml(filial.nome_fantasia)}</div><hr>` : '';
   const linhas = dias.map((l) => `<tr><td>${DIA_SEMANA_CURTO[l.diaSemana]} ${diaMes(l.dia)}</td>`
-    + TURNOS.map((t) => `<td class="n">${l[t].total}</td>`).join('') + '</tr>').join('');
+    + TURNOS.map((t) => {
+      const livres = livresNoTurno(vagas, t, l[t].total);
+      const cls = livres != null && livres <= 0 ? 'n lotado' : 'n';
+      return `<td class="${cls} sep">${livres ?? '-'}</td><td class="${cls}">${l[t].total}</td>`;
+    }).join('') + '</tr>').join('');
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Ocupação por turno</title>
     <style>
       @page { size: 58mm auto; margin: 0; }
@@ -36,22 +46,28 @@ function imprimir({ dias, de, ate, vagas, filial }) {
       hr { border: none; border-top: 1px dashed #999; margin: 8px 0; }
       h1 { font-size: 14px; margin: 0 0 2px; text-align: center; }
       .periodo { font-size: 11px; text-align: center; color: #333; margin-bottom: 6px; }
-      table { width: 100%; border-collapse: collapse; font-size: 12px; }
-      th { font-size: 11px; text-align: right; border-bottom: 1px dashed #999; padding: 2px 0; }
-      th:first-child { text-align: left; }
-      td { padding: 2px 0; border-bottom: 1px dotted #ccc; }
+      table { width: 100%; border-collapse: collapse; font-size: 11px; }
+      th { font-size: 10px; text-align: right; border-bottom: 1px dashed #999; padding: 1px 0; }
+      th.turno { text-align: center; padding-left: 4px; }
+      th.dia { text-align: left; vertical-align: bottom; }
+      td { padding: 2px 0; border-bottom: 1px dotted #ccc; white-space: nowrap; }
       td.n { text-align: right; font-variant-numeric: tabular-nums; }
+      td.sep, th.sep { padding-left: 4px; }
+      td.lotado { font-weight: 800; }
       .rodape { font-size: 10px; color: #333; margin-top: 8px; }
     </style></head><body>
       ${cabecalho}
       <h1>Ocupação por turno</h1>
       <div class="periodo">${escapeHtml(fmtDataBR(de))} a ${escapeHtml(fmtDataBR(ate))}${textoVagas(vagas) ? `<br>Vagas: ${escapeHtml(textoVagas(vagas))}` : ''}</div>
       <table>
-        <thead><tr><th>Dia</th><th>Manhã</th><th>Tarde</th><th>Noite</th></tr></thead>
+        <thead>
+          <tr><th class="dia" rowspan="2">Dia</th>${TURNOS.map((t) => `<th class="turno" colspan="2">${ROTULO_TURNO[t]}</th>`).join('')}</tr>
+          <tr>${TURNOS.map(() => '<th class="sep">Liv</th><th>Oc</th>').join('')}</tr>
+        </thead>
         <tbody>${linhas}</tbody>
       </table>
       <div class="rodape">
-        Reservas + mensalistas (pelo turno contratado).<br>
+        Liv = vagas livres · Oc = ocupadas (reservas + mensalistas pelo turno contratado). Negrito = lotado.<br>
         Impresso em ${new Date().toLocaleString('pt-BR')}
       </div>
     </body></html>`;
@@ -143,8 +159,16 @@ export default function OcupacaoTurno({ perfil }) {
           <div className="tabela-scroll">
             <table>
               <thead><tr>
-                <th>Dia</th>
-                {TURNOS.map((t) => <th key={t} style={{ textAlign: 'right' }}>{ROTULO_TURNO[t]}</th>)}
+                <th rowSpan={2} style={{ verticalAlign: 'bottom' }}>Dia</th>
+                {TURNOS.map((t) => <th key={t} colSpan={2} style={{ textAlign: 'center' }}>{ROTULO_TURNO[t]}</th>)}
+              </tr>
+              <tr>
+                {TURNOS.map((t) => (
+                  <Fragment key={t}>
+                    <th style={{ textAlign: 'right', fontSize: 11 }}>Livres</th>
+                    <th style={{ textAlign: 'right', fontSize: 11 }}>Ocup.</th>
+                  </Fragment>
+                ))}
               </tr></thead>
               <tbody>
                 {dados.dias.map((l) => (
@@ -152,13 +176,21 @@ export default function OcupacaoTurno({ perfil }) {
                     <td><span className="mono">{fmtDataBR(l.dia)}</span> {DIA_SEMANA[l.diaSemana]}</td>
                     {TURNOS.map((t) => {
                       const c = l[t];
-                      const lotado = dados.vagas[t] > 0 && c.total >= dados.vagas[t];
+                      const livres = livresNoTurno(dados.vagas, t, c.total);
+                      const lotado = livres != null && livres <= 0;
+                      const num = { textAlign: 'right', fontVariantNumeric: 'tabular-nums' };
                       return (
-                        <td key={t} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
-                          title={`${c.reservas} reserva(s) + ${c.mensalistas} mensalista(s)`}>
-                          <strong style={lotado ? { color: 'var(--erro)' } : undefined}>{c.total}</strong>
-                          <div className="suave" style={{ fontSize: 11 }}>R {c.reservas} · M {c.mensalistas}</div>
-                        </td>
+                        <Fragment key={t}>
+                          <td style={num}>
+                            <strong style={{ color: livres == null ? undefined : lotado ? 'var(--erro)' : 'var(--amarelo)' }}>
+                              {livres ?? '—'}
+                            </strong>
+                          </td>
+                          <td style={num} title={`${c.reservas} reserva(s) + ${c.mensalistas} mensalista(s)`}>
+                            <strong style={{ color: livres == null ? undefined : lotado ? 'var(--erro)' : 'var(--ok)' }}>{c.total}</strong>
+                            <div className="suave" style={{ fontSize: 11 }}>R {c.reservas} · M {c.mensalistas}</div>
+                          </td>
+                        </Fragment>
                       );
                     })}
                   </tr>
@@ -167,8 +199,8 @@ export default function OcupacaoTurno({ perfil }) {
             </table>
           </div>
           <p className="suave" style={{ fontSize: 11, marginBottom: 0 }}>
-            R = reservas · M = mensalistas. Em vermelho: turno com todas as vagas cadastradas daquele turno ocupadas.
-            Reservas canceladas ou "não veio" não contam.
+            Livres = vagas do turno menos as ocupadas. Ocup. = reservas (R) + mensalistas (M).
+            Os dois ficam em vermelho quando o turno lota. Reservas canceladas ou "não veio" não contam.
           </p>
         </div>
       )}
