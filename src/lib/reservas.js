@@ -1,12 +1,14 @@
-// Capacidade de vagas por tipo (ex.: coberta/descoberta) e dia, a partir de
-// `vagas` (total cadastrado, ver Cadastros → Vagas/boxes) e `reservas`
-// (ver supabase/migrations/0035_reservas.sql). Mensalistas e avulsos não
-// entram nessa conta — só reservas confirmadas.
+// Capacidade de vagas por tipo (ex.: coberta/descoberta), dia e turno, a
+// partir de `vagas` (total cadastrado, ver Cadastros → Vagas/boxes),
+// `reservas` confirmadas (ver supabase/migrations/0035_reservas.sql) e
+// mensalistas pelo turno contratado. Avulsos não entram nessa conta.
 //
 // `supabase` vem por parâmetro (não importado direto) pro arquivo poder ser
 // testado com `node --test` puro (sem Vite, sem import.meta.env) — mesmo
 // padrão de src/lib/fiscal.js/notaFiscal.js.
 import { somarDias, dataDeISO } from './tempo.js';
+import { diaSemanaLegado } from './restricaoMensalista.js';
+import { TURNOS, turnosDaReserva, vagasDoMensalista } from './ocupacaoTurno.js';
 import { calcularProporcional } from '../../packages/tarifacao/tarifacao.ts';
 
 /**
@@ -20,42 +22,91 @@ export async function tiposDeVaga(supabase) {
 }
 
 /**
- * Mapa `{ [dataISO]: { [tipo]: restante } }` pro intervalo [dataInicio,
- * dataFim]. Uma reserva por período (manhã/tarde/noite) também é contada
- * como ocupando o dia inteiro — conservador de propósito, pra nunca
- * prometer uma vaga que colide na prática (ver comentário na migration).
+ * Tipo de vaga de cada mensalista: o tipo da vaga cujo código é o `box` do
+ * cadastro; sem box (ou box que não é vaga cadastrada), e havendo um tipo só
+ * na filial, é esse tipo. Com vários tipos e sem box, não dá pra saber qual
+ * vaga ele usa — fica de fora (null).
  */
-export async function capacidadePorDia(supabase, dataInicio, dataFim) {
-  const [{ data: vagas }, { data: reservas }] = await Promise.all([
-    supabase.from('vagas').select('tipo').eq('ativo', true).not('tipo', 'is', null),
-    supabase.from('reservas').select('tipo, data_inicio, data_fim')
-      .eq('status', 'confirmada').lte('data_inicio', dataFim).gte('data_fim', dataInicio),
-  ]);
+export function tipoDoMensalista(m, tipoPorCodigo, tipos) {
+  const doBox = m.box ? tipoPorCodigo[String(m.box).trim().toUpperCase()] : null;
+  if (doBox) return doBox;
+  return tipos.length === 1 ? tipos[0] : null;
+}
 
+/**
+ * Vagas que sobram por dia, tipo e turno: `{ [dataISO]: { [tipo]: { M, T, N } } }`.
+ * Cada reserva confirmada tira uma vaga dos turnos dela (integral = os três,
+ * ver turnosDaReserva) e cada mensalista ativo tira `qte_vagas` dos turnos
+ * contratados naquele dia da semana (mesma regra do relatório Ocupação por
+ * turno, ver ocupacaoTurno.js). Avulsos não entram — não dá pra prever.
+ */
+export function calcularCapacidade({ vagas, reservas, mensalistas }, dataInicio, dataFim) {
   const totalPorTipo = {};
-  for (const v of vagas || []) totalPorTipo[v.tipo] = (totalPorTipo[v.tipo] || 0) + 1;
+  const tipoPorCodigo = {};
+  for (const v of vagas || []) {
+    if (!v.tipo) continue;
+    totalPorTipo[v.tipo] = (totalPorTipo[v.tipo] || 0) + 1;
+    if (v.codigo) tipoPorCodigo[String(v.codigo).trim().toUpperCase()] = v.tipo;
+  }
+  const tipos = Object.keys(totalPorTipo);
+  const mensPorTipo = {};
+  for (const m of mensalistas || []) {
+    if (m.ativo === false) continue;
+    const tipo = tipoDoMensalista(m, tipoPorCodigo, tipos);
+    if (tipo) (mensPorTipo[tipo] ||= []).push(m);
+  }
 
   const mapa = {};
   for (let dia = dataInicio; dia <= dataFim; dia = somarDias(dia, 1)) {
-    mapa[dia] = { ...totalPorTipo };
+    const diaSemana = diaSemanaLegado(dataDeISO(dia));
+    mapa[dia] = {};
+    for (const tipo of tipos) {
+      mapa[dia][tipo] = {};
+      for (const t of TURNOS) {
+        const mens = (mensPorTipo[tipo] || []).reduce((s, m) => s + vagasDoMensalista(m, t, diaSemana), 0);
+        mapa[dia][tipo][t] = totalPorTipo[tipo] - mens;
+      }
+    }
   }
   for (const r of reservas || []) {
     if (!(r.tipo in totalPorTipo)) continue; // tipo sem vaga cadastrada (não deveria acontecer, mas não quebra)
     const inicio = r.data_inicio > dataInicio ? r.data_inicio : dataInicio;
     const fim = r.data_fim < dataFim ? r.data_fim : dataFim;
     for (let dia = inicio; dia <= fim; dia = somarDias(dia, 1)) {
-      if (mapa[dia]) mapa[dia][r.tipo] = (mapa[dia][r.tipo] ?? totalPorTipo[r.tipo]) - 1;
+      for (const t of turnosDaReserva(r.periodo)) mapa[dia][r.tipo][t] -= 1;
     }
   }
   return mapa;
 }
 
-/** Dias do intervalo pedido em que não sobra vaga do tipo escolhido (vazio = tudo livre). */
-export function diasSemVaga(mapaCapacidade, tipo, dataInicio, dataFim) {
+/** Busca vagas, reservas confirmadas e mensalistas ativos e calcula a capacidade (ver calcularCapacidade). */
+export async function capacidadePorDia(supabase, dataInicio, dataFim) {
+  const [v, r, m] = await Promise.all([
+    supabase.from('vagas').select('codigo, tipo').eq('ativo', true).not('tipo', 'is', null),
+    supabase.from('reservas').select('tipo, periodo, data_inicio, data_fim')
+      .eq('status', 'confirmada').lte('data_inicio', dataFim).gte('data_fim', dataInicio),
+    supabase.from('mensalistas').select('box, ativo, qte_vagas, restr_manha, restr_tarde, restr_noite').eq('ativo', true),
+  ]);
+  return calcularCapacidade({ vagas: v.data, reservas: r.data, mensalistas: m.data }, dataInicio, dataFim);
+}
+
+/** Menor sobra entre os turnos do dia (o que o calendário mostra) — null sem dado. */
+export function restanteDoDia(mapaCapacidade, dia, tipo) {
+  const porTurno = mapaCapacidade[dia]?.[tipo];
+  return porTurno ? Math.min(...TURNOS.map((t) => porTurno[t])) : null;
+}
+
+/**
+ * Dias do intervalo em que falta vaga do tipo em algum turno que a reserva
+ * ocuparia: `[{ dia, turnos: ['T', …] }]` (vazio = tudo livre). Dia fora do
+ * mapa conta como sem vaga nos turnos da reserva.
+ */
+export function diasSemVaga(mapaCapacidade, tipo, dataInicio, dataFim, periodo = 'dia_todo') {
   const dias = [];
   for (let dia = dataInicio; dia <= dataFim; dia = somarDias(dia, 1)) {
-    const restante = mapaCapacidade[dia]?.[tipo];
-    if (restante == null || restante <= 0) dias.push(dia);
+    const porTurno = mapaCapacidade[dia]?.[tipo];
+    const turnos = turnosDaReserva(periodo).filter((t) => porTurno?.[t] == null || porTurno[t] <= 0);
+    if (turnos.length) dias.push({ dia, turnos });
   }
   return dias;
 }

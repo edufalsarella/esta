@@ -15,8 +15,17 @@ import { somarDias, dataDeISO } from './tempo.js';
 import { diaSemanaLegado, turnoContratado } from './restricaoMensalista.js';
 
 export const TURNOS = ['M', 'T', 'N'];
+export const ROTULO_TURNO = { M: 'Manhã', T: 'Tarde', N: 'Noite' };
 const TURNOS_DA_RESERVA = { dia_todo: TURNOS, manha: ['M'], tarde: ['T'], noite: ['N'] };
 const STATUS_QUE_OCUPA = ['confirmada', 'concluida'];
+
+/** Turnos (M/T/N) que uma reserva ocupa pelo `periodo` — integral (ou desconhecido) = os três. */
+export const turnosDaReserva = (periodo) => TURNOS_DA_RESERVA[periodo] || TURNOS;
+
+/** Vagas que o mensalista ocupa no turno nesse dia da semana (0 se não contratado). */
+export function vagasDoMensalista(m, turno, diaSemana) {
+  return turnoContratado(turno, diaSemana, m.restr_manha, m.restr_tarde, m.restr_noite) ? Number(m.qte_vagas || 1) : 0;
+}
 
 /**
  * @param reservas  linhas de `reservas` (periodo, data_inicio, data_fim, status)
@@ -31,8 +40,7 @@ export function ocupacaoPorTurno(reservas, mensalistas, de, ate) {
     const diaSemana = diaSemanaLegado(dataDeISO(dia));
     const linha = { dia, diaSemana };
     for (const t of TURNOS) {
-      const mens = ativos.reduce((soma, m) => soma
-        + (turnoContratado(t, diaSemana, m.restr_manha, m.restr_tarde, m.restr_noite) ? Number(m.qte_vagas || 1) : 0), 0);
+      const mens = ativos.reduce((soma, m) => soma + vagasDoMensalista(m, t, diaSemana), 0);
       linha[t] = { reservas: 0, mensalistas: mens, total: mens };
     }
     dias.push(linha);
@@ -40,7 +48,7 @@ export function ocupacaoPorTurno(reservas, mensalistas, de, ate) {
   const porDia = Object.fromEntries(dias.map((l) => [l.dia, l]));
   for (const r of reservas || []) {
     if (!STATUS_QUE_OCUPA.includes(r.status)) continue;
-    const turnos = TURNOS_DA_RESERVA[r.periodo] || TURNOS;
+    const turnos = turnosDaReserva(r.periodo);
     for (let dia = r.data_inicio > de ? r.data_inicio : de; dia <= r.data_fim && dia <= ate; dia = somarDias(dia, 1)) {
       for (const t of turnos) {
         porDia[dia][t].reservas += 1;

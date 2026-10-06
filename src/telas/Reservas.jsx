@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { hojeISO, fmtDataBR, fmtBRL } from '../lib/tempo.js';
-import { tiposDeVaga, capacidadePorDia, diasSemVaga, tabelaPorTipoDeVaga, valorPropostoReserva } from '../lib/reservas.js';
+import { tiposDeVaga, capacidadePorDia, diasSemVaga, restanteDoDia, tabelaPorTipoDeVaga, valorPropostoReserva } from '../lib/reservas.js';
+import { TURNOS, ROTULO_TURNO } from '../lib/ocupacaoTurno.js';
 import { carregarModelosTicket, carregarTabelasPreco } from '../lib/dados.js';
 import { dadosFilial, dadosReserva } from '../lib/dadosTicket.js';
 import { TicketModal } from '../componentes/Ticket.jsx';
@@ -101,9 +102,9 @@ function mudarAnoMes(anoMes, delta) {
 
 // Calendário mensal: pra cada dia, quantas vagas de cada tipo (coberta/
 // descoberta, texto livre — ver Cadastros → Vagas/boxes) ainda sobram até
-// esgotar. Clicar num dia mostra as reservas que o cobrem + botão pra
-// reservar. Mensalistas e avulsos não entram nessa conta — só reservas
-// confirmadas (ver src/lib/reservas.js).
+// esgotar no turno mais cheio do dia. Clicar num dia mostra as reservas que
+// o cobrem + botão pra reservar. Conta reservas confirmadas (por turno) e
+// mensalistas pelo turno contratado; avulsos não (ver src/lib/reservas.js).
 export default function Reservas({ perfil }) {
   const [anoMes, setAnoMes] = useState(anoMesAtual());
   const [tipos, setTipos] = useState([]);
@@ -190,7 +191,7 @@ export default function Reservas({ perfil }) {
 
     if (!forcar) {
       const mapa = await capacidadePorDia(supabase, m.data_inicio, m.data_fim);
-      const dias = diasSemVaga(mapa, m.tipo, m.data_inicio, m.data_fim);
+      const dias = diasSemVaga(mapa, m.tipo, m.data_inicio, m.data_fim, m.periodo);
       if (dias.length) { setModalNova({ ...m, diasSemVaga: dias }); return; }
     }
 
@@ -268,8 +269,9 @@ export default function Reservas({ perfil }) {
           <div>
             <h2>Reservas de vaga</h2>
             <p className="suave">
-              Por dia, quantas vagas de cada tipo ainda sobram até esgotar — mensalistas e avulsos
-              não entram nessa conta, só reservas confirmadas.
+              Por dia, quantas vagas de cada tipo ainda sobram no turno mais cheio (passe o mouse pra ver
+              manhã, tarde e noite). Conta as reservas confirmadas — a integral ocupa os três turnos — e os
+              mensalistas pelo turno contratado; avulsos não entram.
             </p>
           </div>
           <button className="btn-primary" onClick={abrirNovaReserva} disabled={!tipos.length}>+ Nova reserva</button>
@@ -302,8 +304,9 @@ export default function Reservas({ perfil }) {
                 <>
                   <div className="mono" style={{ fontSize: 12 }}>{Number(dia.slice(-2))}</div>
                   {tipos.map((t) => (
-                    <div key={t} className="suave" style={{ fontSize: 11 }}>
-                      {t}: <strong style={{ color: corRestante(capacidade[dia]?.[t]) }}>{capacidade[dia]?.[t] ?? '—'}</strong>
+                    <div key={t} className="suave" style={{ fontSize: 11 }}
+                      title={capacidade[dia]?.[t] ? TURNOS.map((tu) => `${ROTULO_TURNO[tu]}: ${capacidade[dia][t][tu]}`).join(' · ') : undefined}>
+                      {t}: <strong style={{ color: corRestante(restanteDoDia(capacidade, dia, t)) }}>{restanteDoDia(capacidade, dia, t) ?? '—'}</strong>
                     </div>
                   ))}
                 </>
@@ -374,7 +377,7 @@ export default function Reservas({ perfil }) {
               </div>
               <div className="campo" style={{ flex: 1 }}>
                 <label>Período</label>
-                <select value={modalNova.periodo} onChange={(e) => setModalNova({ ...modalNova, periodo: e.target.value })}>
+                <select value={modalNova.periodo} onChange={(e) => setModalNova({ ...modalNova, periodo: e.target.value, diasSemVaga: null })}>
                   {Object.entries(ROTULO_PERIODO).map(([v, r]) => <option key={v} value={v}>{r}</option>)}
                 </select>
               </div>
@@ -448,7 +451,8 @@ export default function Reservas({ perfil }) {
             {erro && <p className="aviso">{erro}</p>}
             {modalNova.diasSemVaga && (
               <div className="aviso" style={{ marginBottom: 10 }}>
-                Sem vaga "{modalNova.tipo}" em: {modalNova.diasSemVaga.map(fmtDataBR).join(', ')}.
+                Sem vaga "{modalNova.tipo}" em: {modalNova.diasSemVaga.map((d) => (d.turnos.length === 3
+                  ? fmtDataBR(d.dia) : `${fmtDataBR(d.dia)} (${d.turnos.map((tu) => ROTULO_TURNO[tu]).join(', ')})`)).join('; ')}.
                 Ainda dá pra reservar mesmo assim, se for o caso.
               </div>
             )}

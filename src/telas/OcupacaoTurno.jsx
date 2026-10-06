@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { hojeISO, somarDias, fmtDataBR } from '../lib/tempo.js';
-import { ocupacaoPorTurno, TURNOS } from '../lib/ocupacaoTurno.js';
+import { ocupacaoPorTurno, TURNOS, ROTULO_TURNO } from '../lib/ocupacaoTurno.js';
 
-const ROTULO_TURNO = { M: 'Manhã', T: 'Tarde', N: 'Noite' };
 // diaSemana do legado: 1 = domingo … 7 = sábado
 const DIA_SEMANA = ['', 'Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 const DIA_SEMANA_CURTO = ['', 'Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
