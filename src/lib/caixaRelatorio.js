@@ -211,6 +211,10 @@ export async function carregarRelatorioCaixa(caixa) {
   // seção "Mensalidades recebidas" — só aqui em totalRecebido que precisa da
   // versão líquida).
   const totalRecebido = recebidoSaidas + divida + (mensalidadesTotal - mensalistaExtraTotal) + antecipadosTotal + produtosTotal;
+  // "Total faturado": tudo o que o turno gerou, sem o efeito da dívida
+  // (gerada ou quitada) — Total faturado + Dívida (turno) = Total recebido.
+  // O convênio não entra (é pago depois pelo conveniado, igual à dívida).
+  const totalFaturado = Math.round((totalRecebido - divida) * 100) / 100;
   const esperadoCaixa = Number(caixa.valor_abertura || 0) + dinheiro + reforcosTotal - sangriasTotal;
   const diferenca = caixa.valor_fechamento != null ? Number(caixa.valor_fechamento) - esperadoCaixa : null;
 
@@ -291,7 +295,7 @@ export async function carregarRelatorioCaixa(caixa) {
     mensalidades, mensalidadesTotal, produtos, produtosTotal, antecipados, antecipadosTotal,
     dividasPagas: dividasPagasLista, dividaAvulsaTotal,
     porForma, dinheiro, sangrias: sangriasLista, sangriasTotal, reforcos: reforcosLista, reforcosTotal,
-    totalRecebido, esperadoCaixa, diferenca, itens,
+    totalFaturado, totalRecebido, esperadoCaixa, diferenca, itens,
     qtdSaidas: (movs || []).length, qtdCancelados: qtdCancelados || 0, qtdSemSaida,
   };
 }
@@ -337,10 +341,11 @@ export function textoRelatorioCaixa(dados, filial, reimpressao = false, incluirM
   linhas.push('', 'FATURAMENTO',
     `Valor faturado: ${fmtBRL(dados.valorFaturado)}`,
     `Convênio: ${fmtBRL(dados.descontos)}`,
-    `Dívida (turno): ${dados.divida >= 0 ? '+' : ''}${fmtBRL(dados.divida)}`,
     `Mensalidades: ${fmtBRL(dados.mensalidadesTotal)}`,
     `Antecipados: ${fmtBRL(dados.antecipadosTotal)}`,
     `Venda de produtos: ${fmtBRL(dados.produtosTotal)}`,
+    `Total faturado: ${fmtBRL(dados.totalFaturado)}`,
+    `Dívida (turno): ${dados.divida >= 0 ? '+' : ''}${fmtBRL(dados.divida)}`,
     `Total recebido: ${fmtBRL(dados.totalRecebido)}`);
 
   linhas.push('', 'CAIXA', `Troco de abertura: ${fmtBRL(Number(caixa.valor_abertura || 0))}`,
@@ -422,10 +427,11 @@ export function imprimirRelatorioCaixa(dados, filial, reimpressao = false, inclu
   const faturamento = secao('Faturamento')
     + linha('Valor faturado', fmtBRL(dados.valorFaturado))
     + linha('Convênio', fmtBRL(dados.descontos))
-    + linha('Dívida (turno)', (dados.divida >= 0 ? '+' : '') + fmtBRL(dados.divida))
     + linha('Mensalidades', fmtBRL(dados.mensalidadesTotal))
     + linha('Antecipados', fmtBRL(dados.antecipadosTotal))
     + linha('Venda de produtos', fmtBRL(dados.produtosTotal))
+    + linha('Total faturado', fmtBRL(dados.totalFaturado), 'total')
+    + linha('Dívida (turno)', (dados.divida >= 0 ? '+' : '') + fmtBRL(dados.divida))
     + linha('Total recebido', fmtBRL(dados.totalRecebido), 'total');
 
   const caixaSecao = secao('Caixa')
