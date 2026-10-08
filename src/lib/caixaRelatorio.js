@@ -117,7 +117,7 @@ export async function carregarRelatorioCaixa(caixa) {
     et.valor += Number(m.valor || 0) - dividaAnterior;
   }
   const descontos = valorConvenioTotal;
-  // "Valor faturado" é o valor CHEIO gerado pelas saídas (o que o cliente
+  // "Valor Estadia" (antes "Valor faturado") é o valor CHEIO gerado pelas saídas (o que o cliente
   // pagou + o que o convênio vai pagar depois) — recebidoSaidas por si só é
   // só a parte cobrada do cliente na hora (mesmo raciocínio do "Faturado" do
   // BI.jsx: sem somar valor_convenio de volta, o convênio desaparecia da
@@ -339,7 +339,7 @@ export function textoRelatorioCaixa(dados, filial, reimpressao = false, incluirM
   if (!reimpressao) linhas.push(`Sem saída (no pátio): ${dados.qtdSemSaida}`);
 
   linhas.push('', 'FATURAMENTO',
-    `Valor faturado: ${fmtBRL(dados.valorFaturado)}`,
+    `Valor Estadia: ${fmtBRL(dados.valorFaturado)}`,
     `Convênio: ${fmtBRL(dados.descontos)}`,
     `Mensalidades: ${fmtBRL(dados.mensalidadesTotal)}`,
     `Antecipados: ${fmtBRL(dados.antecipadosTotal)}`,
@@ -425,7 +425,7 @@ export function imprimirRelatorioCaixa(dados, filial, reimpressao = false, inclu
     + (reimpressao ? '' : linha('Sem saída (no pátio)', String(dados.qtdSemSaida)));
 
   const faturamento = secao('Faturamento')
-    + linha('Valor faturado', fmtBRL(dados.valorFaturado))
+    + linha('Valor Estadia', fmtBRL(dados.valorFaturado))
     + linha('Convênio', fmtBRL(dados.descontos))
     + linha('Mensalidades', fmtBRL(dados.mensalidadesTotal))
     + linha('Antecipados', fmtBRL(dados.antecipadosTotal))
