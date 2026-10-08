@@ -53,6 +53,8 @@ export default function Configuracoes({ perfil }) {
   const [salvandoCert, setSalvandoCert] = useState(false);
   const [erroCert, setErroCert] = useState('');
   const [msgCert, setMsgCert] = useState('');
+  const [reiniciando, setReiniciando] = useState(false);
+  const [erroReinicio, setErroReinicio] = useState('');
   const podeEditar = ehFornecedor(perfil);
   const podeLimpar = ehSupervisor(perfil);
 
@@ -241,6 +243,17 @@ export default function Configuracoes({ perfil }) {
     if (error) { setErroLimpeza(error.message); return; }
     setPreviaLimpeza(null);
     window.alert(`${data} movimento(s) excluído(s).`);
+  }
+
+  /** Volta o nº de controle do ticket pro 1 a partir de agora (ver 0063_controle_reinicio.sql). */
+  async function reiniciarControle() {
+    if (!window.confirm('Reiniciar a numeração? A próxima entrada sai com o nº 1 (pulando os carros que ainda estão no pátio).')) return;
+    setReiniciando(true); setErroReinicio('');
+    const { data, error } = await supabase.rpc('reiniciar_controle');
+    setReiniciando(false);
+    if (error) { setErroReinicio(error.message); return; }
+    setFilial((f) => ({ ...f, controle_reiniciado_em: data }));
+    window.alert('Numeração reiniciada. A próxima entrada sai com o nº 1.');
   }
 
   function setPatio(campo, valor) {
@@ -505,6 +518,18 @@ export default function Configuracoes({ perfil }) {
                 Desmarcado, o item "Reservas de vaga" some do menu principal — pra quem não
                 trabalha com reserva antecipada, evita uma tela sem uso.
               </p>
+              <div className="campo" style={{ maxWidth: 260, marginBottom: 4 }}>
+                <label>Reiniciar o nº de controle a cada (dias)</label>
+                <input type="number" min="0" step="1" disabled={!podeEditar}
+                  value={filial.config?.patio?.controleReinicioDias ?? 1}
+                  onChange={(e) => setPatio('controleReinicioDias', e.target.value === '' ? '' : Math.max(0, Math.trunc(Number(e.target.value))))} />
+              </div>
+              <p className="suave" style={{ fontSize: 11, marginTop: 0, marginBottom: 10 }}>
+                O número do ticket volta pro 1 à meia-noite a cada tantos dias (1 = todo dia;
+                0 = não reinicia sozinho). Carros que ainda estão no pátio mantêm o número deles
+                e ele é pulado. O supervisor também pode reiniciar na hora, no quadro
+                "Número de controle do ticket" abaixo.
+              </p>
           </>
         )}
       </div>
@@ -579,6 +604,29 @@ export default function Configuracoes({ perfil }) {
           </>
         )}
       </div>
+
+      {podeLimpar && filial && (
+        <div className="card">
+          <h2>Número de controle do ticket</h2>
+          <p className="suave">
+            O número entregue na entrada volta pro 1{' '}
+            {Number(filial.config?.patio?.controleReinicioDias ?? 1) > 0
+              ? `a cada ${Number(filial.config?.patio?.controleReinicioDias ?? 1)} dia(s), à meia-noite`
+              : 'só quando reiniciado aqui'}
+            . Reiniciar agora faz a próxima entrada sair com o nº 1 (pulando os números de
+            carros que ainda estão no pátio).
+          </p>
+          {filial.controle_reiniciado_em && (
+            <p className="suave" style={{ fontSize: 12 }}>
+              Último reinício manual: {new Date(filial.controle_reiniciado_em).toLocaleString('pt-BR')}
+            </p>
+          )}
+          {erroReinicio && <div className="aviso">{erroReinicio}</div>}
+          <button className="btn-ghost" onClick={reiniciarControle} disabled={reiniciando}>
+            {reiniciando ? 'Reiniciando…' : 'Reiniciar numeração agora'}
+          </button>
+        </div>
+      )}
 
       {podeLimpar && (
         <div className="card">

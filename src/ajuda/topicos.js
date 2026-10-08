@@ -254,7 +254,12 @@ export const TOPICOS = [
           'Usa leitura de placa por foto (câmera)?',
           'Usa entrada de placa por voz (microfone)?',
           'Usa reservas de vaga? (desmarcado, o menu Reservas some).',
+          'Reiniciar o nº de controle a cada (dias): o número do ticket volta pro 1 à meia-noite a cada tantos dias (padrão 1 = todo dia; 0 = não reinicia sozinho). Números de carros ainda no pátio são pulados.',
         ],
+      },
+      {
+        titulo: 'Número de controle do ticket',
+        texto: ['O supervisor pode reiniciar a numeração na hora pelo botão "Reiniciar numeração agora": a próxima entrada sai com o nº 1, pulando os carros que ainda estão no pátio. A contagem dos dias para o reinício automático passa a valer a partir desse clique.'],
       },
       {
         titulo: 'Integrações',
