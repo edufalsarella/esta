@@ -27,6 +27,7 @@ import PainelFornecedor from './telas/PainelFornecedor.jsx';
 import EscolherFilial from './telas/EscolherFilial.jsx';
 import SenhaMesGate from './telas/SenhaMesGate.jsx';
 import SessoesGate from './telas/SessoesGate.jsx';
+import SegundaSenhaGate, { esquecerSegundaSenha } from './telas/SegundaSenhaGate.jsx';
 import { ehFornecedor } from './lib/acesso.js';
 
 export default function App() {
@@ -37,7 +38,11 @@ export default function App() {
   useEffect(() => {
     if (!configurado) { setCarregando(false); return; }
     supabase.auth.getSession().then(({ data }) => { setSessao(data.session); setCarregando(false); });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSessao(s));
+    const { data: sub } = supabase.auth.onAuthStateChange((evento, s) => {
+      // Saiu: a segunda senha do fornecedor volta a ser pedida no próximo login.
+      if (evento === 'SIGNED_OUT') esquecerSegundaSenha();
+      setSessao(s);
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
 
@@ -71,17 +76,21 @@ export default function App() {
     </div></div>
   );
 
-  // Fornecedor atende vários clientes: escolhe qual acessar antes de entrar.
-  if (ehFornecedor(perfil) && !perfil.filial_ativa) return <EscolherFilial perfil={perfil} />;
-
-  // Trava o login até bater a senha do mês (ver SenhaMesGate.jsx) — exceto
-  // pro fornecedor: ele é quem controla esse mecanismo, não pode ficar
-  // trancado fora de uma filial inadimplente e sem conseguir nem ajudar o
-  // cliente a resolver.
-  if (!ehFornecedor(perfil)) {
-    return <SenhaMesGate><SessoesGate><Rotas perfil={perfil} /></SessoesGate></SenhaMesGate>;
+  // Fornecedor: segunda senha (fixa, conferida no banco) antes de qualquer
+  // coisa; depois escolhe qual cliente acessar.
+  if (ehFornecedor(perfil)) {
+    return (
+      <SegundaSenhaGate userId={perfil.id}>
+        {perfil.filial_ativa ? <Rotas perfil={perfil} /> : <EscolherFilial perfil={perfil} />}
+      </SegundaSenhaGate>
+    );
   }
-  return <Rotas perfil={perfil} />;
+
+  // Trava o login até bater a senha do mês (ver SenhaMesGate.jsx) — o
+  // fornecedor (tratado acima) não passa por aqui: ele é quem controla esse
+  // mecanismo, não pode ficar trancado fora de uma filial inadimplente e sem
+  // conseguir nem ajudar o cliente a resolver.
+  return <SenhaMesGate><SessoesGate><Rotas perfil={perfil} /></SessoesGate></SenhaMesGate>;
 }
 
 function Rotas({ perfil }) {
