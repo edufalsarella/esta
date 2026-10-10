@@ -98,7 +98,7 @@ export const TOPICOS = [
       {
         titulo: 'Resumo do turno',
         itens: [
-          'Faturado (saídas): o valor cheio das estadias, incluindo o que o convênio vai pagar e a dívida gerada no turno.',
+          'Estadias (Saídas): o valor cheio das estadias, incluindo o que o convênio vai pagar e a dívida gerada no turno.',
           'Dívida (turno): negativa quando o turno gerou dívida nova; positiva quando recebeu dívida de antes.',
           'Mensalidades, Antecipados, Venda de produtos: recebidos no turno.',
           'Total do turno: o que entrou de fato (sem o convênio, que é pago depois, e sem a dívida ainda não paga).',

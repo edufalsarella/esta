@@ -333,7 +333,7 @@ export default function Caixa({ perfil }) {
         {resumo && (
           <div className="kpis">
             <Kpi rotulo="Saídas no turno" valor={resumo.qtd} />
-            <Kpi rotulo="Faturado (saídas)" valor={fmtBRL(resumo.faturado)} moeda />
+            <Kpi rotulo="Estadias (Saídas)" valor={fmtBRL(resumo.faturado)} moeda />
             <Kpi rotulo="Convênio" valor={fmtBRL(resumo.convenio)} moeda />
             <Kpi rotulo="Dívida (turno)"
               valor={(resumo.divida < 0 ? '-' : resumo.divida > 0 ? '+' : '') + fmtBRL(Math.abs(resumo.divida))}
