@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { hojeISO, dataDeISO, dataHoraDe, limitesDiaLocal, fmtBRL, fmtHora, fmtDataBR } from '../lib/tempo.js';
 import { GraficoLinha, GraficoBarras } from '../componentes/Graficos.jsx';
-import { valorFormaComTaxa } from '../lib/caixaRelatorio.js';
+import { valorFormaComTaxa, taxaDaForma } from '../lib/caixaRelatorio.js';
 import { horas, minuto, minutosParaHHMM } from '../../packages/tarifacao/tarifacao.ts';
 
 function escapeHtml(s) {
@@ -717,13 +717,9 @@ export default function BI({ perfil }) {
                 .sort(([, a], [, b]) => b - a)
                 .map(([forma, valor]) => ({ rotulo: forma, valor }))}
               formatarValor={fmtBRL}
+              extra={{ titulo: '% Retido', texto: (it) => taxaDaForma(it.valor, dados.percPorForma?.[it.rotulo]) }}
             />
-            <table><tbody>
-              {Object.entries(dados.recebidoPorForma).map(([k, v]) => (
-                <tr key={k}><td>{k}</td><td style={{ textAlign: 'right' }}>{valorFormaComTaxa(v, dados.percPorForma?.[k])}</td></tr>
-              ))}
-              {Object.keys(dados.recebidoPorForma).length === 0 && <tr><td className="suave">Sem pagamentos no período.</td></tr>}
-            </tbody></table>
+            {Object.keys(dados.recebidoPorForma).length === 0 && <p className="suave">Sem pagamentos no período.</p>}
           </div>
 
           <div className="card">

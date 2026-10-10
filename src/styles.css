@@ -135,6 +135,11 @@ th { color: var(--suave); font-size: 12px; text-transform: uppercase; }
 .grafico-barra-trilha { background: var(--panel2); border-radius: 6px; height: 12px; overflow: hidden; }
 .grafico-barra-fill { background: var(--ambar); height: 100%; border-radius: 0 6px 6px 0; }
 .grafico-barra-valor { font-size: 13px; font-weight: 700; text-align: right; white-space: nowrap; }
+/* Com coluna extra (ex.: "% Retido" no BI): barra mais curta e fina, números em colunas alinhadas. */
+.grafico-barras.com-extra .grafico-barra-linha { grid-template-columns: minmax(80px, 180px) minmax(60px, 260px) minmax(90px, auto) minmax(110px, auto); justify-content: start; gap: 16px; }
+.grafico-barras.com-extra .grafico-barra-trilha { height: 8px; }
+.grafico-barra-extra { font-size: 13px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.grafico-barra-cab span { font-size: 11px; font-weight: 600; color: var(--suave); text-transform: uppercase; }
 
 .status { font-size: 12px; padding: 2px 8px; border-radius: 20px; border: 1px solid var(--linha); text-transform: uppercase; }
 .status-gerada { color: var(--ambar); border-color: var(--ambar); }

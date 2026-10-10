@@ -19,10 +19,16 @@ function escapeHtml(s) {
  * "R$ 100,00 - 3,5% - R$ 3,50". Sem taxa, só o valor.
  */
 export function valorFormaComTaxa(valor, perc) {
+  const t = taxaDaForma(valor, perc);
+  return t ? `${fmtBRL(valor)} - ${t.replace(' ', ' - ')}` : fmtBRL(valor);
+}
+
+/** Só a taxa: "3,5% R$ 3,50" — vazio quando a forma não tem taxa (0 ou em branco). */
+export function taxaDaForma(valor, perc) {
   const p = Number(perc || 0);
-  if (!(p > 0)) return fmtBRL(valor);
+  if (!(p > 0)) return '';
   const taxa = Math.round(Number(valor || 0) * p) / 100;
-  return `${fmtBRL(valor)} - ${p.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% - ${fmtBRL(taxa)}`;
+  return `${p.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% ${fmtBRL(taxa)}`;
 }
 
 export function valorComDivida(it) {

@@ -91,11 +91,22 @@ export function GraficoLinha({ pontos, formatarValor = (v) => String(v), formata
  * Barras horizontais — comparação de magnitude entre poucas categorias (ex.:
  * faturado por operador). `itens`: [{ rotulo, valor }], já ordenado por quem chamou.
  */
-export function GraficoBarras({ itens, formatarValor = (v) => String(v) }) {
+/**
+ * Barras horizontais. `extra` (opcional): uma coluna a mais à direita, com
+ * cabeçalho — `{ titulo, texto: (item) => string }` — e barras mais curtas
+ * pra sobrar espaço pros números (ex.: "% Retido" das formas de pagamento).
+ */
+export function GraficoBarras({ itens, formatarValor = (v) => String(v), extra }) {
   if (!itens?.length) return null;
   const max = Math.max(...itens.map((i) => i.valor), 1);
   return (
-    <div className="grafico-barras">
+    <div className={'grafico-barras' + (extra ? ' com-extra' : '')}>
+      {extra && (
+        <div className="grafico-barra-linha grafico-barra-cab">
+          <span /><span /><span className="grafico-barra-valor">Valor</span>
+          <span className="grafico-barra-extra">{extra.titulo}</span>
+        </div>
+      )}
       {itens.map((it) => (
         <div className="grafico-barra-linha" key={it.rotulo}>
           <span className="grafico-barra-rotulo">{it.rotulo}</span>
@@ -103,6 +114,7 @@ export function GraficoBarras({ itens, formatarValor = (v) => String(v) }) {
             <div className="grafico-barra-fill" style={{ width: `${Math.max(2, (it.valor / max) * 100)}%` }} />
           </div>
           <span className="grafico-barra-valor">{formatarValor(it.valor)}</span>
+          {extra && <span className="grafico-barra-extra">{extra.texto(it)}</span>}
         </div>
       ))}
     </div>
