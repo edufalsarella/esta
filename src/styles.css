@@ -135,9 +135,30 @@ th { color: var(--suave); font-size: 12px; text-transform: uppercase; }
 .grafico-barra-trilha { background: var(--panel2); border-radius: 6px; height: 12px; overflow: hidden; }
 .grafico-barra-fill { background: var(--ambar); height: 100%; border-radius: 0 6px 6px 0; }
 .grafico-barra-valor { font-size: 13px; font-weight: 700; text-align: right; white-space: nowrap; }
-/* Com coluna extra (ex.: "% Retido" no BI): barra mais curta e fina, números em colunas alinhadas. */
-.grafico-barras.com-extra .grafico-barra-linha { grid-template-columns: minmax(80px, 180px) minmax(60px, 260px) minmax(90px, auto) minmax(110px, auto); justify-content: start; gap: 16px; }
-.grafico-barras.com-extra .grafico-barra-trilha { height: 8px; }
+/* Com coluna extra (ex.: "% Retido" no BI): ocupa o quadro todo — barra no meio,
+   Valor e a coluna extra encostada à direita, letras um pouco maiores. */
+.grafico-barras.com-extra { gap: 10px; }
+.grafico-barras.com-extra .grafico-barra-linha { grid-template-columns: minmax(110px, 22%) 1fr minmax(120px, auto) minmax(140px, auto); gap: 20px; }
+.grafico-barras.com-extra .grafico-barra-trilha { height: 14px; border-radius: 7px; }
+.grafico-barras.com-extra .grafico-barra-fill { border-radius: 0 7px 7px 0; }
+.grafico-barras.com-extra .grafico-barra-rotulo,
+.grafico-barras.com-extra .grafico-barra-valor,
+.grafico-barras.com-extra .grafico-barra-extra { font-size: 15px; }
+/* Celular: nome, Valor e extra numa linha; a barra embaixo, na largura toda. */
+@media (max-width: 640px) {
+  .grafico-barras.com-extra .grafico-barra-linha {
+    grid-template-columns: 1fr auto auto; gap: 4px 12px;
+    grid-template-areas: "rotulo valor extra" "barra barra barra";
+  }
+  .grafico-barras.com-extra .grafico-barra-rotulo { grid-area: rotulo; }
+  .grafico-barras.com-extra .grafico-barra-trilha { grid-area: barra; }
+  .grafico-barras.com-extra .grafico-barra-valor { grid-area: valor; }
+  .grafico-barras.com-extra .grafico-barra-extra { grid-area: extra; min-width: 90px; }
+  .grafico-barras.com-extra .grafico-barra-cab > span:nth-child(-n+2) { display: none; }
+  .grafico-barras.com-extra .grafico-barra-rotulo,
+  .grafico-barras.com-extra .grafico-barra-valor,
+  .grafico-barras.com-extra .grafico-barra-extra { font-size: 14px; }
+}
 .grafico-barra-extra { font-size: 13px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .grafico-barra-cab span { font-size: 11px; font-weight: 600; color: var(--suave); text-transform: uppercase; }
 
