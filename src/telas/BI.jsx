@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { hojeISO, dataDeISO, dataHoraDe, limitesDiaLocal, fmtBRL, fmtHora, fmtDataBR } from '../lib/tempo.js';
 import { GraficoLinha, GraficoBarras } from '../componentes/Graficos.jsx';
+import { valorFormaComTaxa } from '../lib/caixaRelatorio.js';
 import { horas, minuto, minutosParaHHMM } from '../../packages/tarifacao/tarifacao.ts';
 
 function escapeHtml(s) {
@@ -43,7 +44,7 @@ function imprimirRelatorio(dados, de, ate, filial, veiculosDetalhe) {
   const porTipo = Object.entries(dados.porTipo)
     .map(([k, v]) => `<tr><td>${escapeHtml(rotuloTipo(k))}</td><td style="text-align:right">${v}</td></tr>`).join('');
   const porForma = Object.entries(dados.recebidoPorForma)
-    .map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td style="text-align:right">${escapeHtml(fmtBRL(v))}</td></tr>`).join('');
+    .map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td style="text-align:right">${escapeHtml(valorFormaComTaxa(v, dados.percPorForma?.[k]))}</td></tr>`).join('');
   const porTipoCancelado = Object.entries(dados.porTipoCancelado)
     .map(([k, v]) => `<tr><td>${escapeHtml(rotuloTipo(k))}</td><td style="text-align:right">${v}</td></tr>`).join('');
   const porServico = Object.entries(dados.porServico)
@@ -194,7 +195,7 @@ function textoRelatorio(dados, de, ate, filial) {
   linhas.push('');
   linhas.push('Recebido por forma de pagamento:');
   const formas = Object.entries(dados.recebidoPorForma);
-  if (formas.length) for (const [k, v] of formas) linhas.push(`  ${k}: ${fmtBRL(v)}`);
+  if (formas.length) for (const [k, v] of formas) linhas.push(`  ${k}: ${valorFormaComTaxa(v, dados.percPorForma?.[k])}`);
   else linhas.push('  Sem pagamentos no período.');
   linhas.push('');
   linhas.push(`Mensalidades recebidas: ${dados.mensalidades.length} · ${fmtBRL(dados.mensalidadesTotal)}`);
@@ -275,8 +276,11 @@ export default function BI({ perfil }) {
     function valorServicoDoMovimento(itens) {
       return itens.reduce((s, i) => s + (i.valor != null ? Number(i.valor) : (valorServicoPorTipo[i.servicos?.tabela_tipo] || 0)), 0);
     }
-    const { data: formas } = await supabase.from('formas_pagamento').select('codigo,descricao,eh_devedor');
+    const { data: formas } = await supabase.from('formas_pagamento').select('codigo,descricao,eh_devedor,perc_ajuste');
     const descForma = Object.fromEntries((formas || []).map((f) => [f.codigo, f.descricao]));
+    // Taxa da forma ("% ajuste", ver cadastros) por descrição — é a chave de
+    // recebidoPorForma. Só informativo: "valor - % - taxa" no resumo por forma.
+    const percPorForma = Object.fromEntries((formas || []).map((f) => [f.descricao, Number(f.perc_ajuste || 0)]));
     const formasDevedorCods = new Set((formas || []).filter((f) => f.eh_devedor).map((f) => f.codigo));
     // Quitação avulsa de saldo devedor no período (⋮ → Receber dívida, ver
     // 0056_divida_pagamentos.sql) — mesma natureza de valor_dev, só que sem
@@ -511,7 +515,7 @@ export default function BI({ perfil }) {
       // entravam na conta sem aparecer em lugar nenhum).
       faturado: valorAvulso + valorServicos + valorConvenioTotal + antecipadoTotal + bonusTotal + mensalidadesFaturadoTotal + produtosTotal,
       recebidoSaidas, descontos, valorServicos, antecipados: antecipadoTotal, bonus: bonusTotal, divida,
-      porTipo, porTipoCancelado, recebidoPorForma, porServico,
+      porTipo, porTipoCancelado, recebidoPorForma, percPorForma, porServico,
       tempoMedio: saidasComTempo ? minutosParaHHMM(Math.round(minutosTotal / saidasComTempo)) : 0,
       mensalidades, mensalidadesTotal,
       produtosVendidos, produtosTotal,
@@ -716,7 +720,7 @@ export default function BI({ perfil }) {
             />
             <table><tbody>
               {Object.entries(dados.recebidoPorForma).map(([k, v]) => (
-                <tr key={k}><td>{k}</td><td style={{ textAlign: 'right' }}>{fmtBRL(v)}</td></tr>
+                <tr key={k}><td>{k}</td><td style={{ textAlign: 'right' }}>{valorFormaComTaxa(v, dados.percPorForma?.[k])}</td></tr>
               ))}
               {Object.keys(dados.recebidoPorForma).length === 0 && <tr><td className="suave">Sem pagamentos no período.</td></tr>}
             </tbody></table>
