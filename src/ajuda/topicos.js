@@ -116,6 +116,98 @@ export const TOPICOS = [
     ],
   },
   {
+    id: 'reservas',
+    titulo: 'Reservas de vaga',
+    rota: '/reservas',
+    resumo: 'Reserva de vaga por tipo (ex.: coberta/descoberta), período e dias, com calendário de vagas disponíveis.',
+    secoes: [
+      {
+        titulo: 'Calendário',
+        texto: [
+          'Mostra, por dia, quantas vagas de cada tipo ainda sobram. Verde = folga, amarelo = apertado (menos de 5), vermelho = esgotado. Use "‹ Mês anterior" e "Mês seguinte ›" pra navegar.',
+          'A conta usa as vagas cadastradas (Cadastros → Vagas/boxes), as reservas confirmadas e os mensalistas pelo dia/turno contratado. Avulsos não entram (não dá pra prever).',
+          'Quando a filial tem vagas por turno (Manhã/Tarde/Noite no cadastro de vagas), cada dia mostra M, T e N separados; senão mostra o turno mais cheio (passe o mouse pra ver os três).',
+        ],
+      },
+      {
+        titulo: 'Nova reserva',
+        itens: [
+          'Tipo de vaga e Período: Integral (dia todo) ocupa os três turnos; Manhã, Tarde ou Noite só o próprio turno.',
+          'De / Até: os dias da reserva (não aceita data passada).',
+          'Nome, telefone, placa, modelo e observação são opcionais — com a placa, o pátio reconhece a reserva na chegada.',
+          'Valor proposto: estimativa calculada pela tabela de preço do prefixo do código das vagas daquele tipo (ex.: vagas "C001…" → tabela "C"). A cobrança de verdade é na saída.',
+          'Valor antecipado: recebido na hora, entra no caixa aberto (pede pra abrir um, se não houver) e é descontado na saída do veículo.',
+          'Sem vaga em algum dia/turno, aparece o aviso com os dias que faltam — dá pra "Reservar mesmo assim".',
+        ],
+      },
+      {
+        titulo: 'Reservas do dia',
+        itens: [
+          'Clique num dia do calendário pra ver as reservas que o cobrem, com o total por tipo.',
+          'Imprimir: ticket da reserva para o cliente. "Imprimir relatório do dia": lista completa do dia.',
+          'Concluída / Não veio / Excluir: muda a situação da reserva. Excluir libera os dias de novo.',
+          'Coluna "Chegou": marcada sozinha quando o carro da reserva dá entrada no pátio (não muda a situação).',
+          'Reservas encerradas há mais de 30 dias são apagadas automaticamente.',
+        ],
+      },
+      {
+        titulo: 'Na entrada do pátio',
+        texto: ['Ao digitar a placa de uma reserva confirmada para hoje, o pátio avisa e já traz o modelo; se o modelo estiver no catálogo, a entrada é registrada direto. O valor antecipado da reserva é somado ao antecipado da entrada.'],
+      },
+    ],
+  },
+  {
+    id: 'bi',
+    titulo: 'BI / Painel',
+    rota: '/bi',
+    resumo: 'Indicadores do período (saídas, valores por tipo, dívida, mensalidades, produtos), com detalhe por dia, operador e forma de pagamento.',
+    secoes: [
+      {
+        titulo: 'Período e envio',
+        texto: ['Escolha De / Até e clique em Atualizar (os números também se atualizam sozinhos a cada 30 segundos). "Ver veículos" inclui a lista de veículos no relatório. WhatsApp, Email e Imprimir mandam o relatório do período.'],
+      },
+      {
+        titulo: 'Indicadores',
+        itens: [
+          'Saídas: quantidade de veículos que saíram no período.',
+          'Avulso, Serviços, Convênio, Antecipados, Bônus fidelidade, Mensalidades e Venda de produtos: valores do período.',
+          'Faturado = soma de todos esses — o valor cheio, antes de descontos e abatimentos.',
+          'Dívida: saldo de dívida do período. Negativa quando gerou mais dívida (forma "Devedor") do que quitou; positiva quando quitou mais dívida antiga do que gerou.',
+          'Tempo médio: permanência média dos veículos que saíram.',
+        ],
+      },
+      {
+        titulo: 'Detalhes',
+        itens: [
+          'Resumo por dia (quando o período tem mais de um dia).',
+          'Por operador: saídas, mensalidades e vendas de produto de cada um.',
+          'Por tipo, Cancelados por tipo e Por tipo de lavagem (serviços).',
+          'Recebido por forma de pagamento.',
+          'Mensalidades recebidas, Vendas de produtos (com o estoque atual) e a lista de Veículos.',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'relatorio-convenios',
+    titulo: 'Relatório de convênios',
+    rota: '/relatorio-convenios',
+    resumo: 'O que cada convênio deve no período, pelas saídas — é com ele que se cobra o conveniado.',
+    secoes: [
+      {
+        titulo: 'Filtros',
+        itens: [
+          'Saída de / até: o período (conta a data de saída, quando o valor do convênio é apurado).',
+          'Convênio e Grupo: em branco trazem todos. Escolhendo um grupo, sai um bloco por convênio com o total de cada um e o total do grupo no fim (o Grupo é cadastrado em Cadastros → Convênios).',
+        ],
+      },
+      {
+        titulo: 'Envio e impressão',
+        texto: ['A tela e a impressão sempre mostram estadia por estadia (controle, placa, modelo, entrada, saída e valor do convênio). No WhatsApp e no e-mail vão só os totais por convênio e por grupo — marque "Detalhar estadias no envio" para mandar o detalhe (no WhatsApp pode ficar longo demais; aí o sistema avisa).'],
+      },
+    ],
+  },
+  {
     id: 'estatistica',
     titulo: 'Estatística',
     rota: '/estatistica',
@@ -175,6 +267,217 @@ export const TOPICOS = [
       {
         titulo: 'Na tela e na impressão',
         texto: ['Escolha o período (o botão "Próximos 7 dias" preenche uma semana a partir de hoje). Cada turno tem duas colunas: Livres (vagas do turno menos as ocupadas, em amarelo) e Ocupadas (reservas + mensalistas, em verde, com a quebra R/M embaixo). Quando o turno lota, os dois ficam em vermelho. As vagas do turno são as Integrais + as daquele turno (ver Cadastros → Vagas/boxes). "Imprimir" sai na bobina de 58mm: uma linha por dia (dia da semana e data) e, em cada turno, Liv e Oc — turno lotado sai em negrito.'],
+      },
+    ],
+  },
+  {
+    id: 'precos',
+    titulo: 'Tabelas de preço',
+    rota: '/precos',
+    resumo: 'Quanto cobrar pelo tempo de permanência: cada tabela (código + descrição) tem as faixas de tempo e valor.',
+    secoes: [
+      {
+        titulo: 'A tabela',
+        itens: [
+          'Tipo (código): o código curto da tabela (ex.: P, C, M). É ele que aparece no pátio e no modelo de veículo.',
+          'Pontos fidelidade: quantos pontos o cliente ganha a cada saída nesta tabela (ver Faixas de bônus).',
+          'Valor antecipado (evento/promoção): valor fixo já cobrado na entrada — o campo "Vlr. antecipado" da entrada vem preenchido quando o modelo usa esta tabela.',
+          'Valor do serviço: valor fixo cobrado quando esta tabela é usada como Serviço (Cadastros → Serviços). Sem efeito numa tabela de veículo.',
+          'Seleção manual na Entrada: a tabela aparece na lista para escolher na mão quando o carro não está no catálogo de modelos.',
+          'Clique numa tabela da lista pra ver e editar as faixas dela embaixo.',
+        ],
+      },
+      {
+        titulo: 'Faixas',
+        itens: [
+          'Até (HH.MM): o tempo máximo da faixa, em hora comercial — 1.30 = 1h30, 24.00 = 24h (o decimal é minuto, não fração de hora).',
+          'Fixo: cobra o valor cheio da faixa.',
+          'Por período: o valor é por período (0.30 = 30 min, 1 = 1h, 24 = 24h), contado a partir do fim da faixa anterior; fração de período arredonda pra cima.',
+          'Pede valor: sem número fixo — na saída, o operador informa quanto cobrar.',
+          'Valor convênio: o que o convênio paga nesta faixa, para convênios com "Grade própria (CON)".',
+          'Editar e Excluir em cada linha; "+ Faixa" adiciona no fim.',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'convenios',
+    titulo: 'Convênios',
+    rota: '/convenios',
+    resumo: 'Empresas ou parceiros que pagam toda ou parte da estadia do cliente (desconto na saída).',
+    secoes: [
+      {
+        titulo: 'Como o convênio desconta',
+        itens: [
+          'Escolha UMA forma: % desc. (percentual sobre o valor calculado), Vlr fixo (valor fixo, independente do tempo) ou Grade própria (CON — o valor da coluna "Valor convênio" da faixa).',
+          'Tabela alt.: calcula por outra tabela de preço em vez da do veículo; combina com qualquer uma das três formas.',
+          'Pede hora: na saída, o operador informa o horário em que o cliente saiu do convênio (vem carimbado no ticket). O convênio paga até ali; o resto é cobrado do cliente pela "Tabela depois do convênio" (em branco, pela tabela do veículo).',
+          'Tipo: Convênio ou Vale.',
+        ],
+      },
+      {
+        titulo: 'Outros campos',
+        itens: [
+          'Só supervisor: na saída do pátio, o convênio só aparece na lista para supervisor — operador e gerente não escolhem.',
+          'Grupo: junta convênios de uma mesma rede/matriz no Relatório de convênios. Não muda a cobrança.',
+          'CNPJ/CPF, inscrição, endereço, cidade, CEP, telefone e e-mail: necessários quando a nota fiscal sai no nome do convênio.',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'mensalistas',
+    titulo: 'Mensalistas',
+    rota: '/mensalistas',
+    resumo: 'Mensalistas, pacotes e hóspedes: cadastro, veículos, vagas contratadas, vencimento e recebimento da mensalidade.',
+    secoes: [
+      {
+        titulo: 'Lista',
+        itens: [
+          'Ordenar por Placa/código, Nome (A-Z) ou Data de vencimento (o mais atrasado primeiro).',
+          '"Vencida" ao lado do Próx. pagamento: passou do vencimento mais a tolerância — no pátio entra como avulso.',
+          'Clique na linha pra ver os veículos e o histórico de recebimentos (com reimpressão do recibo).',
+        ],
+      },
+      {
+        titulo: 'Cadastro (Editar / + Novo)',
+        itens: [
+          'Código: normalmente a placa do veículo principal.',
+          'Tipo: Mensalista, Pacote ou Hóspede. Pacote vale até o Próx. pagamento; no dia seguinte é desativado sozinho e, 7 dias depois, excluído (os recebimentos continuam no caixa e no BI). Renovar a data antes disso o reativa.',
+          'CPF/CNPJ: tomador da nota fiscal da mensalidade. Com CNPJ, dá pra buscar nome e endereço da empresa automaticamente.',
+          'Recolhimento do ISS: padrão da filial, Normal (A) ou Retido (R).',
+          'Valor da mensalidade, Data do próximo pagamento, Dia vencimento (dia fixo do mês) e Tolerância (dias de carência depois do vencimento).',
+          'Vagas contratadas: quantos veículos dele podem estar no pátio ao mesmo tempo; os excedentes entram como avulso.',
+          'Dias e turnos contratados: desmarque o que NÃO está contratado. Fora do contratado, a entrada é cobrada como avulso até o início do próximo turno contratado do dia.',
+          'Aceita Extra?: aparece na saída do pátio para receber dívida de avulso (forma "Devedor" → "Mensalista"), cobrada junto com a próxima mensalidade.',
+          'Ativo: desmarcado, a placa entra como avulso.',
+        ],
+      },
+      {
+        titulo: 'Veículos',
+        texto: ['Na linha expandida, cadastre as placas do mensalista (com modelo e tabela). Cada placa só pode estar em um mensalista. A câmera (📷) lê a placa por foto, se estiver ligada nas Configurações.'],
+      },
+      {
+        titulo: 'Receber',
+        itens: [
+          'Precisa de caixa aberto (se não houver, a tela pede o troco pra abrir).',
+          'Informe data, valor (sugerido pelo cadastro), forma de pagamento e o próximo pagamento (já vem calculado: um mês depois, ou o Dia vencimento).',
+          'Dívida de avulso pendente (Aceita Extra?) aparece com o botão "Incluir" para somar no valor.',
+          'Gerar nota fiscal (DPS): aparece quando a filial emite NFS-e; usa o CPF/CNPJ do mensalista como tomador.',
+          'Ao confirmar, sai o comprovante de recebimento e a data do próximo pagamento avança no cadastro.',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'formas',
+    titulo: 'Formas de pagamento',
+    rota: '/formas',
+    resumo: 'As formas que aparecem na saída do pátio, nas mensalidades e nas vendas (dinheiro, débito, crédito, Pix…).',
+    secoes: [
+      {
+        titulo: 'Campos',
+        itens: [
+          'Código e Descrição: como aparece nas listas e nos relatórios.',
+          'É dinheiro: entra no "Em dinheiro" e no "Esperado no caixa" do fechamento.',
+          'É "Devedor": o valor não é recebido — vira dívida da placa (ou de um mensalista que aceita extra), cobrada numa próxima vez.',
+          'InfiniteTap (Crédito/Débito): liga a forma ao botão "Cobrar no celular" da cobrança por aproximação.',
+          'É "Sem Parar": usada na saída de veículo autorizado pelo Sem Parar.',
+          'Ativo: desmarcado, a forma some das listas.',
+          '% ajuste e RPS/DPS sempre vêm do sistema antigo e hoje não mudam a cobrança.',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'vagas',
+    titulo: 'Vagas/boxes',
+    rota: '/vagas',
+    resumo: 'Quantidade de vagas por tipo e turno — é a base da conta de vagas das Reservas e do relatório Ocupação por turno.',
+    secoes: [
+      {
+        titulo: 'Campos',
+        itens: [
+          'Código: o prefixo (letras iniciais) diz qual tabela de preço calcula o valor proposto da reserva — ex.: "C001" usa a tabela "C". Sem prefixo, a reserva fica sem valor proposto.',
+          'Tipo: texto livre (ex.: Coberta, Descoberta, Normal). Use exatamente o mesmo texto em todas as vagas do mesmo tipo.',
+          'Turno: Integral (vale nos três turnos, o normal) ou Manhã/Tarde/Noite (só naquele turno, para quem reserva por turno).',
+        ],
+      },
+      {
+        titulo: 'Cadastrar em lote',
+        texto: [
+          'Cria várias vagas de uma vez: Tipo, Turno, Prefixo do código, Quantidade e "Começa em" (ex.: prefixo C, 40 vagas → C001 a C040).',
+          'Para reservar por turno com uma quantidade de vagas em cada turno, crie um lote por turno com o mesmo Tipo (ex.: 20 Manhã, 20 Tarde, 20 Noite). Sem prefixo, use o "Começa em" para os códigos não se repetirem (1, 21, 41).',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'produtos',
+    titulo: 'Produtos',
+    rota: '/produtos',
+    resumo: 'Produtos vendidos no balcão (água, item de loja…), com controle de estoque.',
+    secoes: [
+      {
+        titulo: 'Como funciona',
+        texto: ['Cadastre código, descrição, valor de compra, valor de venda e estoque. A venda é feita no Pátio → ⋮ → Venda Produtos: baixa o estoque, entra no caixa do operador e aparece no BI. Venda de produto nunca gera nota fiscal de serviço (RPS/NFS-e).'],
+      },
+    ],
+  },
+  {
+    id: 'modelos',
+    titulo: 'Modelos de veículo',
+    rota: '/modelos',
+    resumo: 'Catálogo de modelos e a tabela de preço padrão de cada um.',
+    secoes: [
+      {
+        titulo: 'Como funciona',
+        texto: ['Na entrada, ao escolher o modelo, o pátio já usa a "Tabela padrão" dele (ex.: moto → tabela M). Carro fora do catálogo: a entrada pede a tabela (só aparecem as marcadas como "Seleção manual" em Tabelas de preço) e o nome do carro novo, que passa a fazer parte do catálogo. Nesta tela dá pra buscar e ordenar por código ou nome.'],
+      },
+    ],
+  },
+  {
+    id: 'servicos',
+    titulo: 'Serviços',
+    rota: '/servicos',
+    resumo: 'Serviços cobrados à parte da estadia (lavagem, polimento…) e a tabela de preço de cada um.',
+    secoes: [
+      {
+        titulo: 'Como funciona',
+        itens: [
+          'Cada serviço usa uma tabela de preço: o valor vem das faixas dela ou do "Valor do serviço" fixo da tabela. Faixa "Pede valor" pergunta o valor na hora.',
+          'No pátio: botão "Serviços" na entrada, ou "Serviço" na lista de veículos no pátio. O serviço é somado na saída, separado da estadia.',
+          'O BI mostra os serviços em "Por tipo de lavagem".',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'bonus',
+    titulo: 'Faixas de bônus',
+    rota: '/bonus',
+    resumo: 'Desconto por pontos de fidelidade acumulados pelo cliente.',
+    secoes: [
+      {
+        titulo: 'Como funciona',
+        texto: ['O cliente ganha pontos a cada saída (os "Pontos fidelidade" da tabela de preço e dos serviços). Cada faixa diz quantos pontos valem quanto de desconto — ex.: 1000 pontos = R$ 50, 2000 pontos = R$ 110. Na saída, o sistema oferece a maior faixa que o cliente já alcançou; o desconto aparece no BI como "Bônus fidelidade".'],
+      },
+    ],
+  },
+  {
+    id: 'importar',
+    titulo: 'Importar do legado (.dbf)',
+    rota: '/importar',
+    resumo: 'Traz cadastros e RPS pendentes do sistema antigo (Harbour/Clipper). Só o fornecedor acessa — é usado na implantação.',
+    secoes: [
+      {
+        titulo: 'Como funciona',
+        itens: [
+          'Escolha o que importar e o arquivo .dbf; o sistema detecta as colunas e mostra o mapeamento antes de gravar.',
+          'Tabelas de preço: mostra as tabelas detectadas no arquivo.',
+          'RPS pendentes (ESTAMORT.DBF): os RPS gerados e ainda sem NFS-e, para enviar por aqui (série 11000).',
+          'Importar modelo de ticket (.txt): traz o layout de um comprovante do sistema antigo.',
+        ],
       },
     ],
   },
@@ -280,6 +583,80 @@ export const TOPICOS = [
           'Ambiente: homologação para testes, produção para valer.',
           'Certificado digital A1 (.pfx): cadastrado pelo fornecedor nesta mesma tela.',
         ],
+      },
+    ],
+  },
+  {
+    id: 'usuarios',
+    titulo: 'Usuários',
+    rota: '/usuarios',
+    resumo: 'Quem acessa o sistema, com que papel e quais telas pode abrir.',
+    secoes: [
+      {
+        titulo: 'Papéis',
+        itens: [
+          'Operador: pátio, caixa e reservas (e a Ocupação por turno).',
+          'Gerente: tudo do operador + BI, relatórios, mensalistas, convênios, serviços, modelos, fiscal e contas a receber.',
+          'Supervisor: tudo do estacionamento, inclusive preços e usuários (alguns dados das Configurações só o fornecedor altera).',
+          'Fornecedor: quem mantém o sistema — acessa todos os estacionamentos.',
+        ],
+      },
+      {
+        titulo: 'Telas que pode acessar',
+        texto: ['No cadastro do usuário, as caixinhas começam com as telas do papel. Marque ou desmarque para liberar ou bloquear telas só para aquela pessoa — a lista mostra "telas escolhidas" quando foi personalizado. Ajuda e Sobre ficam sempre liberadas.'],
+      },
+      {
+        titulo: 'Criar e manter',
+        itens: [
+          '+ Novo: "Criar login novo" (e-mail e senha inicial) ou "Vincular um login que já existe" (UID do Supabase).',
+          'Trocar senha: define uma nova senha para o usuário.',
+          'Ativo: desmarcado, o usuário não consegue mais entrar.',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'modelos-ticket',
+    titulo: 'Modelos de ticket',
+    rota: '/modelos-ticket',
+    resumo: 'O layout de cada comprovante impresso, em texto com tokens entre arrobas, como no sistema antigo.',
+    secoes: [
+      {
+        titulo: 'Como funciona',
+        itens: [
+          'Escolha o comprovante: Entrada, Saída, 2ª via, Recebimento de mensalidade, RPS/NFS-e, Reserva de vaga ou Dívida. O ✓ indica que a filial já tem modelo próprio.',
+          'Edite o texto à esquerda e confira na Pré-visualização (com dados de exemplo). A lista de tokens disponíveis fica ao lado.',
+          'Salvar modelo grava para esta filial. "Restaurar modelo padrão" traz o texto de exemplo; "Voltar ao layout fixo" apaga o modelo próprio.',
+          'Só supervisores editam. Dá pra colar um modelo .txt do sistema antigo (ou importar em Importar do legado).',
+        ],
+      },
+      {
+        titulo: 'Tokens e condições',
+        itens: [
+          '@CC@ = placa, @C#@ = número de controle, e assim por diante (lista completa na própria tela). Token desconhecido sai em branco.',
+          '@SE(campo)@ no começo da linha: a linha só sai se o campo tiver conteúdo; @SE(#campo)@ só se estiver vazio.',
+          '@SE(campo=valor)@ e @SE(campo<>valor)@ (ou #): compara o campo com um valor.',
+          'Formatação: @PG+@ … @PG-@ (grande), @PP+@ (pequeno), @PE+@ (negrito), @PI+@ (itálico), @PS+@ (sublinhado).',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'acesso',
+    titulo: 'Acesso, senhas e usuários simultâneos',
+    resumo: 'Senha do mês, limite de postos usando o sistema ao mesmo tempo e a segunda senha do fornecedor.',
+    secoes: [
+      {
+        titulo: 'Senha do mês',
+        texto: ['Depois do login, o sistema pode pedir a senha do mês, informada pelo fornecedor. Sem ela não libera. Ao pedir por telefone ou mensagem, informe o número do cliente que aparece na tela.'],
+      },
+      {
+        titulo: 'Usuários simultâneos',
+        texto: ['A filial pode ter um limite de postos usando o sistema ao mesmo tempo (definido pelo fornecedor). Cada navegador conta como um posto — duas abas na mesma máquina contam uma vez só; a cabine e o celular contam separados. Ao atingir o limite aparece "Limite de usuários atingido": feche o sistema em outro posto (botão Sair) e clique em "Tentar novamente".'],
+      },
+      {
+        titulo: 'Fornecedor',
+        texto: ['O usuário fornecedor digita uma segunda senha depois do login e então escolhe qual estacionamento acessar. A liberação vale para a aba aberta; ao sair ou abrir outra aba, pede de novo.'],
       },
     ],
   },
