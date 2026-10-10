@@ -63,11 +63,12 @@ export function Convenios({ perfil }) {
 
 export function Formas({ perfil }) {
   return <Crud perfil={perfil} titulo="Formas de pagamento" tabela="formas_pagamento" ordem="codigo"
-    subtitulo="Dinheiro, débito, crédito, Pix… O % de ajuste altera o valor cobrado na forma."
+    subtitulo="Dinheiro, débito, crédito, Pix… O % ajuste é a taxa que a forma cobra do valor recebido (ex.: cartão) — aparece no resumo por forma do fechamento de caixa."
     colunas={[
       { campo: 'codigo', rotulo: 'Código', obrigatorio: true },
       { campo: 'descricao', rotulo: 'Descrição', obrigatorio: true },
-      { campo: 'perc_ajuste', rotulo: '% ajuste', tipo: 'number' },
+      { campo: 'perc_ajuste', rotulo: '% ajuste', tipo: 'number',
+        ajuda: 'Taxa que esta forma cobra do valor recebido (ex.: 3,5 no cartão de crédito). No fechamento do caixa, o resumo por forma mostra "valor - % - taxa". Não muda o valor cobrado do cliente.' },
       { campo: 'eh_dinheiro', rotulo: 'É dinheiro', tipo: 'bool' },
       { campo: 'rps_sempre', rotulo: 'RPS/DPS sempre', tipo: 'bool', naTabela: false },
       { campo: 'eh_devedor', rotulo: 'É "Devedor" (vira dívida da placa)', tipo: 'bool', naTabela: false },

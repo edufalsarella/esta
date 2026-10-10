@@ -13,6 +13,18 @@ function escapeHtml(s) {
  * em texto corrido aqui (WhatsApp/e-mail/impressão não têm coluna).
  * `it.valor` nulo (quitação avulsa de dívida, 100% dívida) não mostra "R$ 0,00".
  */
+/**
+ * Valor de uma forma de pagamento no resumo do caixa, com a taxa da forma
+ * ("% ajuste" do cadastro, como no sistema antigo) quando houver:
+ * "R$ 100,00 - 3,5% - R$ 3,50". Sem taxa, só o valor.
+ */
+export function valorFormaComTaxa(valor, perc) {
+  const p = Number(perc || 0);
+  if (!(p > 0)) return fmtBRL(valor);
+  const taxa = Math.round(Number(valor || 0) * p) / 100;
+  return `${fmtBRL(valor)} - ${p.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% - ${fmtBRL(taxa)}`;
+}
+
 export function valorComDivida(it) {
   const valorTxt = it.valor == null ? '—' : fmtBRL(it.valor);
   if (!it.divida || Math.abs(it.divida) < 0.005) return valorTxt;
@@ -39,7 +51,7 @@ export async function carregarRelatorioCaixa(caixa) {
   ] = await Promise.all([
     supabase.from('movimentos').select('*').eq('caixa_id', caixa.id).not('dt_saida', 'is', null),
     supabase.from('sangrias').select('*').eq('caixa_id', caixa.id).order('created_at'),
-    supabase.from('formas_pagamento').select('codigo,descricao,eh_dinheiro,eh_devedor'),
+    supabase.from('formas_pagamento').select('codigo,descricao,eh_dinheiro,eh_devedor,perc_ajuste'),
     supabase.from('mensalista_pagamentos').select('*, mensalistas(razao)').eq('caixa_id', caixa.id).order('dt_pagamento'),
     supabase.from('movimento_pagamentos').select('*, movimentos(placa)').eq('caixa_id', caixa.id),
     supabase.from('reservas').select('id, valor_antecipado, forma_antecipado, placa, nome, created_at').eq('caixa_id_antecipado', caixa.id),
@@ -83,6 +95,9 @@ export async function carregarRelatorioCaixa(caixa) {
   const dinheiroCods = new Set((formas || []).filter((f) => f.eh_dinheiro).map((f) => f.codigo));
   const formasDevedorCods = new Set((formas || []).filter((f) => f.eh_devedor).map((f) => f.codigo));
   const descForma = Object.fromEntries((formas || []).map((f) => [f.codigo, f.descricao]));
+  // "% ajuste" da forma = taxa que ela cobra do valor recebido (ex.: cartão).
+  // Só informativo no resumo por forma — não muda nenhum valor do caixa.
+  const percForma = Object.fromEntries((formas || []).map((f) => [f.codigo, Number(f.perc_ajuste || 0)]));
   const descConvenio = Object.fromEntries((convenios || []).map((c) => [c.codigo, c.razao]));
   const descTabela = {};
   for (const t of tabelasPreco || []) if (!descTabela[t.tipo]) descTabela[t.tipo] = t.descricao;
@@ -290,7 +305,7 @@ export async function carregarRelatorioCaixa(caixa) {
 
   return {
     caixa, operador: operadorRow?.nome || '—',
-    porTipo, porConvenio, porTabela, descConvenio, descTabela, descForma,
+    porTipo, porConvenio, porTabela, descConvenio, descTabela, descForma, percForma,
     valorFaturado, valorProporcionalTotal, descontos, divida,
     mensalidades, mensalidadesTotal, produtos, produtosTotal, antecipados, antecipadosTotal,
     dividasPagas: dividasPagasLista, dividaAvulsaTotal,
@@ -359,7 +374,7 @@ export function textoRelatorioCaixa(dados, filial, reimpressao = false, incluirM
 
   linhas.push('', 'FORMAS DE PAGAMENTO');
   const formasEntries = Object.entries(dados.porForma);
-  if (formasEntries.length) for (const [k, v] of formasEntries) linhas.push(`${dados.descForma[k] || k}: ${fmtBRL(v)}`);
+  if (formasEntries.length) for (const [k, v] of formasEntries) linhas.push(`${dados.descForma[k] || k}: ${valorFormaComTaxa(v, dados.percForma?.[k])}`);
   else linhas.push('Sem recebimentos: —');
 
   if (Object.keys(dados.porConvenio).length) {
@@ -453,7 +468,7 @@ export function imprimirRelatorioCaixa(dados, filial, reimpressao = false, inclu
 
   const formasHtml = secao('Formas de pagamento')
     + (Object.entries(dados.porForma).length
-      ? Object.entries(dados.porForma).map(([k, v]) => linha(dados.descForma[k] || k, fmtBRL(v))).join('')
+      ? Object.entries(dados.porForma).map(([k, v]) => linha(dados.descForma[k] || k, valorFormaComTaxa(v, dados.percForma?.[k]))).join('')
       : linha('Sem recebimentos', '—'));
 
   const conveniosHtml = Object.keys(dados.porConvenio).length ? (

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { fmtBRL, dataHoraDe } from '../lib/tempo.js';
-import { carregarRelatorioCaixa, imprimirRelatorioCaixa, textoRelatorioCaixa, valorComDivida } from '../lib/caixaRelatorio.js';
+import { carregarRelatorioCaixa, imprimirRelatorioCaixa, textoRelatorioCaixa, valorComDivida, valorFormaComTaxa } from '../lib/caixaRelatorio.js';
 import { ehGerente } from '../lib/acesso.js';
 
 const fmtQuando = (d) => d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -486,7 +486,7 @@ function RelatorioCaixaModal({ dados, filial, reimpressao, onFechar }) {
 
         <SecaoRelatorio titulo="Formas de pagamento">
           {formasEntries.length
-            ? formasEntries.map(([k, v]) => <div key={k}>{dados.descForma[k] || k}: {fmtBRL(v)}</div>)
+            ? formasEntries.map(([k, v]) => <div key={k}>{dados.descForma[k] || k}: {valorFormaComTaxa(v, dados.percForma?.[k])}</div>)
             : <div>Sem recebimentos: —</div>}
         </SecaoRelatorio>
 
